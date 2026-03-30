@@ -4,17 +4,17 @@ import (
 	"log"
 	"net/http"
 
-	"j30att/observer/internal/commands"
 	"j30att/observer/internal/config"
-	"j30att/observer/internal/controller"
-	"j30att/observer/internal/repository"
-	"j30att/observer/internal/router"
+	"j30att/observer/internal/server/controller"
+	"j30att/observer/internal/server/handler"
+	"j30att/observer/internal/server/repository"
+	"j30att/observer/internal/server/router"
 )
 
 func main() {
 	cfg := config.NewServerConfig()
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := commands.NewUpdateMetricCommand(repo)
+	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
 	metricController := controller.NewMetricController(updateMetricCommand)
 	r := router.NewRouter(metricController)
 

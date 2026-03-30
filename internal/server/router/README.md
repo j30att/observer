@@ -1,4 +1,4 @@
-# internal/router
+# internal/server/router
 
 В этом пакете размещается настройка маршрутов HTTP-сервера.
 

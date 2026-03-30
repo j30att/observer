@@ -4,15 +4,15 @@
 
 ## Архитектура
 
-Текущая цепочка зависимостей:
+Текущая цепочка зависимостей сервера:
 
-`main -> router -> controller -> command -> repository`
+`main -> router -> controller -> handler -> repository`
 
 По слоям:
 - `main` собирает зависимости приложения
 - `router` связывает маршруты с методами контроллера
 - `controller` принимает HTTP-запрос и формирует HTTP-ответ
-- `command` выполняет бизнес-логику
+- `handler` выполняет бизнес-логику
 - `repository` сохраняет и читает данные
 
 ## Точки входа
@@ -29,15 +29,15 @@
 
 ## Internal
 
-### `internal/router`
+### `internal/server/router`
 
-- `internal/router/router.go`  
+- `internal/server/router/router.go`  
   Настройка HTTP-маршрутов. Сейчас регистрирует маршрут:
   - `POST /update/{type}/{name}/{value}` -> `MetricController.UpdateMetric`
 
-### `internal/controller`
+### `internal/server/controller`
 
-- `internal/controller/controller.go`  
+- `internal/server/controller/controller.go`  
   HTTP-контроллер для метрик.
 
 Основная ответственность:
@@ -51,24 +51,24 @@
 - `func NewMetricController(...)`
 - `func (c *MetricController) UpdateMetric(...)`
 
-### `internal/commands`
+### `internal/server/handler`
 
-- `internal/commands/metrics.handler.go`  
-  Команда обновления метрики.
+- `internal/server/handler/handler.go`  
+  Обработчик обновления метрики.
 
 Основные элементы:
-- `type UpdateMetricCommand struct`
-- `func NewUpdateMetricCommand(...)`
-- `func (c *UpdateMetricCommand) Execute(...)`
+- `type UpdateMetricHandler struct`
+- `func NewUpdateMetricHandler(...)`
+- `func (c *UpdateMetricHandler) Execute(...)`
 
 Что делает `Execute(...)`:
 - для `gauge` парсит `float64` и сохраняет значение
 - для `counter` парсит `int64` и увеличивает счётчик
 - для неизвестного типа возвращает `ErrUnsupportedMetricType`
 
-### `internal/repository`
+### `internal/server/repository`
 
-- `internal/repository/metrics.go`  
+- `internal/server/repository/repository.go`  
   In-memory репозиторий метрик.
 
 Что хранит:
@@ -104,7 +104,7 @@
 
 ## Тесты
 
-### `internal/controller/controller_test.go`
+### `internal/server/controller/controller_test.go`
 
 Покрывает HTTP-поведение контроллера:
 - успешный запрос
@@ -112,7 +112,7 @@
 - неподдерживаемый тип метрики
 - невалидное значение
 
-### `internal/commands/metrics.handler_test.go`
+### `internal/server/handler/handler_test.go`
 
 Покрывает бизнес-логику команды:
 - сохранение `gauge`
@@ -120,7 +120,7 @@
 - ошибка на неподдерживаемый тип
 - ошибка на невалидное число
 
-### `internal/repository/metrics_test.go`
+### `internal/server/repository/repository_test.go`
 
 Покрывает репозиторий:
 - сохранение и чтение `gauge`
@@ -130,4 +130,4 @@
 ## Примечания
 
 - В корне проекта нет `.go` файлов, поэтому для запуска всех тестов нужно использовать `go test ./...`, а не просто `go test`.
-- Основная рабочая логика сейчас сосредоточена в `internal/controller`, `internal/commands` и `internal/repository`.
+- Основная серверная логика сейчас сосредоточена в `internal/server/controller`, `internal/server/handler` и `internal/server/repository`.

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/model"
-	"j30att/observer/internal/repository"
+	"j30att/observer/internal/server/repository"
 )
 
 func TestSaveGaugeAndLoadReturnsStoredValue(t *testing.T) {

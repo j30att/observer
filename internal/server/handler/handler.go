@@ -1,24 +1,24 @@
-package commands
+package handler
 
 import (
 	"errors"
 	"strconv"
 
 	"j30att/observer/internal/model"
-	"j30att/observer/internal/repository"
+	"j30att/observer/internal/server/repository"
 )
 
 var ErrUnsupportedMetricType = errors.New("unsupported metric type")
 
-type UpdateMetricCommand struct {
+type UpdateMetricHandler struct {
 	repo repository.MetricsRepository
 }
 
-func NewUpdateMetricCommand(repo repository.MetricsRepository) *UpdateMetricCommand {
-	return &UpdateMetricCommand{repo: repo}
+func NewUpdateMetricHandler(repo repository.MetricsRepository) *UpdateMetricHandler {
+	return &UpdateMetricHandler{repo: repo}
 }
 
-func (c *UpdateMetricCommand) Execute(metricType, name, rawValue string) error {
+func (c *UpdateMetricHandler) Execute(metricType, name, rawValue string) error {
 	switch metricType {
 	case model.Gauge:
 		value, err := strconv.ParseFloat(rawValue, 64)

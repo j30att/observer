@@ -5,14 +5,14 @@ import (
 	"net/http"
 	"strings"
 
-	"j30att/observer/internal/commands"
+	"j30att/observer/internal/server/handler"
 )
 
 type MetricController struct {
-	updateMetricCommand *commands.UpdateMetricCommand
+	updateMetricCommand *handler.UpdateMetricHandler
 }
 
-func NewMetricController(updateMetricCommand *commands.UpdateMetricCommand) *MetricController {
+func NewMetricController(updateMetricCommand *handler.UpdateMetricHandler) *MetricController {
 	return &MetricController{
 		updateMetricCommand: updateMetricCommand,
 	}
@@ -39,7 +39,7 @@ func (c *MetricController) UpdateMetric(w http.ResponseWriter, r *http.Request) 
 	}
 
 	status := http.StatusBadRequest
-	if errors.Is(err, commands.ErrUnsupportedMetricType) {
+	if errors.Is(err, handler.ErrUnsupportedMetricType) {
 		status = http.StatusBadRequest
 	}
 

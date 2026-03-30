@@ -1,4 +1,4 @@
-# internal/commands
+# internal/server/handler
 
 В этом пакете размещаются команды приложения.
 

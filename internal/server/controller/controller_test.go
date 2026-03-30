@@ -6,15 +6,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"j30att/observer/internal/commands"
-	"j30att/observer/internal/controller"
-	"j30att/observer/internal/repository"
-	"j30att/observer/internal/router"
+	"j30att/observer/internal/server/controller"
+	"j30att/observer/internal/server/handler"
+	"j30att/observer/internal/server/repository"
+	"j30att/observer/internal/server/router"
 )
 
 func TestUpdateMetricHandlerReturnsOK(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := commands.NewUpdateMetricCommand(repo)
+	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
 	metricController := controller.NewMetricController(updateMetricCommand)
 	r := router.NewRouter(metricController)
 
@@ -29,7 +29,7 @@ func TestUpdateMetricHandlerReturnsOK(t *testing.T) {
 
 func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := commands.NewUpdateMetricCommand(repo)
+	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
 	metricController := controller.NewMetricController(updateMetricCommand)
 	r := router.NewRouter(metricController)
 
@@ -44,7 +44,7 @@ func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
 
 func TestUpdateMetricHandlerRejectsUnsupportedMetricType(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := commands.NewUpdateMetricCommand(repo)
+	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
 	metricController := controller.NewMetricController(updateMetricCommand)
 	r := router.NewRouter(metricController)
 
@@ -55,12 +55,12 @@ func TestUpdateMetricHandlerRejectsUnsupportedMetricType(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), commands.ErrUnsupportedMetricType.Error())
+	require.Contains(t, rec.Body.String(), handler.ErrUnsupportedMetricType.Error())
 }
 
 func TestUpdateMetricHandlerRejectsInvalidGaugeValue(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := commands.NewUpdateMetricCommand(repo)
+	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
 	metricController := controller.NewMetricController(updateMetricCommand)
 	r := router.NewRouter(metricController)
 
