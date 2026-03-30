@@ -3,9 +3,9 @@ package controller_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/commands"
 	"j30att/observer/internal/controller"
 	"j30att/observer/internal/repository"
@@ -24,9 +24,7 @@ func TestUpdateMetricHandlerReturnsOK(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
-	}
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
@@ -41,9 +39,7 @@ func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestUpdateMetricHandlerRejectsUnsupportedMetricType(t *testing.T) {
@@ -58,13 +54,8 @@ func TestUpdateMetricHandlerRejectsUnsupportedMetricType(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
-	}
-
-	if !strings.Contains(rec.Body.String(), commands.ErrUnsupportedMetricType.Error()) {
-		t.Fatalf("expected body to contain %q, got %q", commands.ErrUnsupportedMetricType.Error(), rec.Body.String())
-	}
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), commands.ErrUnsupportedMetricType.Error())
 }
 
 func TestUpdateMetricHandlerRejectsInvalidGaugeValue(t *testing.T) {
@@ -79,7 +70,5 @@ func TestUpdateMetricHandlerRejectsInvalidGaugeValue(t *testing.T) {
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rec.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
