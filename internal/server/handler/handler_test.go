@@ -2,10 +2,10 @@ package handler_test
 
 import (
 	"errors"
+	"j30att/observer/internal/server/model"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"j30att/observer/internal/model"
 	"j30att/observer/internal/server/handler"
 	"j30att/observer/internal/server/repository"
 )

@@ -2,7 +2,7 @@ package repository
 
 import (
 	"errors"
-	"j30att/observer/internal/model"
+	"j30att/observer/internal/server/model"
 	"sync"
 )
 

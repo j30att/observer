@@ -2,9 +2,9 @@ package handler
 
 import (
 	"errors"
+	"j30att/observer/internal/server/model"
 	"strconv"
 
-	"j30att/observer/internal/model"
 	"j30att/observer/internal/server/repository"
 )
 
