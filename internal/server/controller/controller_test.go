@@ -48,6 +48,22 @@ func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+func TestUpdateMetricHandlerAllowsEmptyContentType(t *testing.T) {
+	repo := repository.NewMetricsRepository()
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
+	r := router.NewRouter(metricController)
+
+	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/12.5", nil)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
 func TestUpdateMetricHandlerRejectsUnsupportedMetricType(t *testing.T) {
 	repo := repository.NewMetricsRepository()
 	updateMetricCommand := update.New(repo)

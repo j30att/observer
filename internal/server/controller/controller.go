@@ -34,7 +34,7 @@ func NewMetricController(
 }
 
 func (c *MetricController) UpdateMetric(w http.ResponseWriter, r *http.Request) {
-	if contentType := r.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+	if contentType := r.Header.Get("Content-Type"); contentType != "" && !strings.HasPrefix(contentType, "text/plain") {
 		http.Error(w, "content type must be text/plain", http.StatusBadRequest)
 		return
 	}
