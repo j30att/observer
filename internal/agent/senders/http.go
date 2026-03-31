@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"strings"
 
 	agentmodel "j30att/observer/internal/agent/model"
 )
@@ -24,20 +25,22 @@ func NewHTTPSender(address string) *HTTPSender {
 }
 
 func parseBaseURL(address string) *url.URL {
+	if !strings.Contains(address, "://") {
+		return &url.URL{
+			Scheme: "http",
+			Host:   strings.TrimRight(address, "/"),
+		}
+	}
+
 	baseURL, err := url.Parse(address)
 	if err != nil {
 		return &url.URL{
 			Scheme: "http",
-			Host:   address,
+			Host:   strings.TrimRight(address, "/"),
 		}
 	}
 
-	if baseURL.Scheme == "" {
-		baseURL = &url.URL{
-			Scheme: "http",
-			Host:   baseURL.Path,
-		}
-	}
+	baseURL.Path = strings.TrimRight(baseURL.Path, "/")
 
 	return baseURL
 }

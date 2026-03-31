@@ -67,3 +67,11 @@ func TestHTTPSenderAddsHTTPSchemeWhenAddressDoesNotContainIt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "/update/counter/PollCount/1", requestedPath)
 }
+
+func TestParseBaseURLTreatsLocalhostAddressAsHost(t *testing.T) {
+	baseURL := parseBaseURL("localhost:8080")
+
+	require.Equal(t, "http", baseURL.Scheme)
+	require.Equal(t, "localhost:8080", baseURL.Host)
+	require.Empty(t, baseURL.Path)
+}
