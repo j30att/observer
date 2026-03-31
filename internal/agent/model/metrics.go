@@ -1,6 +1,8 @@
 package model
 
 const (
+	CounterMetricType = "counter"
+	GaugeMetricType   = "gauge"
 	RandomValueMetric = "RandomValue"
 	PollCountMetric   = "PollCount"
 )

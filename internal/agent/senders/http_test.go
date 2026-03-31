@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -46,4 +47,23 @@ func TestHTTPSenderReturnsErrorWhenServerRespondsWithUnexpectedStatus(t *testing
 
 	err := sender.Send(context.Background(), snapshot)
 	require.Error(t, err)
+}
+
+func TestHTTPSenderAddsHTTPSchemeWhenAddressDoesNotContainIt(t *testing.T) {
+	var requestedPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	address := strings.TrimPrefix(server.URL, "http://")
+	sender := NewHTTPSender(address)
+	snapshot := agentmodel.NewMetricsSnapshot()
+	snapshot.Counters["PollCount"] = 1
+
+	err := sender.Send(context.Background(), snapshot)
+	require.NoError(t, err)
+	require.Equal(t, "/update/counter/PollCount/1", requestedPath)
 }

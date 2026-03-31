@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/server/controller"
@@ -14,7 +15,10 @@ import (
 )
 
 func main() {
-	cfg := config.NewServerConfig()
+	cfg, err := config.ParseServerConfig(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
 	repo := repository.NewMetricsRepository()
 	updateMetricCommand := update.New(repo)
 	getMetricQuery := get.New(repo)

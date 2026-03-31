@@ -3,37 +3,56 @@ package senders
 import (
 	"context"
 	"fmt"
-	commonmodel "j30att/observer/internal/server/model"
 	"net/http"
+	"net/url"
+	"path"
 	"strconv"
-	"strings"
 
 	agentmodel "j30att/observer/internal/agent/model"
 )
 
 type HTTPSender struct {
-	address string
+	baseURL *url.URL
 	client  *http.Client
 }
 
 func NewHTTPSender(address string) *HTTPSender {
 	return &HTTPSender{
-		address: strings.TrimRight(address, "/"),
+		baseURL: parseBaseURL(address),
 		client:  &http.Client{},
 	}
+}
+
+func parseBaseURL(address string) *url.URL {
+	baseURL, err := url.Parse(address)
+	if err != nil {
+		return &url.URL{
+			Scheme: "http",
+			Host:   address,
+		}
+	}
+
+	if baseURL.Scheme == "" {
+		baseURL = &url.URL{
+			Scheme: "http",
+			Host:   baseURL.Path,
+		}
+	}
+
+	return baseURL
 }
 
 func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapshot) error {
 	for name, value := range snapshot.Gauges {
 		rawValue := strconv.FormatFloat(value, 'f', -1, 64)
-		if err := s.sendMetric(ctx, commonmodel.Gauge, name, rawValue); err != nil {
+		if err := s.sendMetric(ctx, agentmodel.GaugeMetricType, name, rawValue); err != nil {
 			return err
 		}
 	}
 
 	for name, value := range snapshot.Counters {
 		rawValue := strconv.FormatInt(value, 10)
-		if err := s.sendMetric(ctx, commonmodel.Counter, name, rawValue); err != nil {
+		if err := s.sendMetric(ctx, agentmodel.CounterMetricType, name, rawValue); err != nil {
 			return err
 		}
 	}
@@ -42,8 +61,10 @@ func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapsh
 }
 
 func (s *HTTPSender) sendMetric(ctx context.Context, metricType, name, value string) error {
-	url := fmt.Sprintf("%s/update/%s/%s/%s", s.address, metricType, name, value)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	metricURL := *s.baseURL
+	metricURL.Path = path.Join(metricURL.Path, "update", metricType, name, value)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricURL.String(), nil)
 	if err != nil {
 		return err
 	}

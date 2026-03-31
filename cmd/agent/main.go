@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
 	"j30att/observer/internal/agent"
 	"j30att/observer/internal/agent/collectors"
@@ -12,7 +13,10 @@ import (
 )
 
 func main() {
-	cfg := config.NewAgentConfig()
+	cfg, err := config.ParseAgentConfig(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
 	store := repository.NewMetricsRepository()
 	collector := collectors.NewRuntimeCollector()
 	sender := senders.NewHTTPSender(cfg.ServerAddress)
