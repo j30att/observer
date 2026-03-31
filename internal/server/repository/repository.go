@@ -2,8 +2,10 @@ package repository
 
 import (
 	"errors"
-	"j30att/observer/internal/server/model"
+	"sort"
 	"sync"
+
+	"j30att/observer/internal/server/model"
 )
 
 var ErrMetricNotFound = errors.New("metric not found")
@@ -12,6 +14,7 @@ type MetricsRepository interface {
 	SaveGauge(name string, value float64) error
 	SaveCounter(name string, delta int64) error
 	Load(metricType, name string) (model.Metrics, error)
+	List() []model.Metrics
 }
 
 type InMemoryMetricsRepository struct {
@@ -73,4 +76,35 @@ func (r *InMemoryMetricsRepository) Load(metricType, name string) (model.Metrics
 	default:
 		return model.Metrics{}, ErrMetricNotFound
 	}
+}
+
+func (r *InMemoryMetricsRepository) List() []model.Metrics {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	metrics := make([]model.Metrics, 0, len(r.gauges)+len(r.counters))
+
+	for name, value := range r.gauges {
+		value := value
+		metrics = append(metrics, model.Metrics{
+			ID:    name,
+			MType: model.Gauge,
+			Value: &value,
+		})
+	}
+
+	for name, delta := range r.counters {
+		delta := delta
+		metrics = append(metrics, model.Metrics{
+			ID:    name,
+			MType: model.Counter,
+			Delta: &delta,
+		})
+	}
+
+	sort.Slice(metrics, func(i, j int) bool {
+		return metrics[i].ID < metrics[j].ID
+	})
+
+	return metrics
 }

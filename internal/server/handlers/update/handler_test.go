@@ -1,18 +1,18 @@
-package handler_test
+package update_test
 
 import (
 	"errors"
-	"j30att/observer/internal/server/model"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"j30att/observer/internal/server/handler"
+	"j30att/observer/internal/server/handlers/update"
+	"j30att/observer/internal/server/model"
 	"j30att/observer/internal/server/repository"
 )
 
 func TestExecuteSavesGauge(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	command := handler.NewUpdateMetricHandler(repo)
+	command := update.New(repo)
 
 	err := command.Execute(model.Gauge, "Alloc", "12.5")
 	require.NoError(t, err)
@@ -26,7 +26,7 @@ func TestExecuteSavesGauge(t *testing.T) {
 
 func TestExecuteAccumulatesCounter(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	command := handler.NewUpdateMetricHandler(repo)
+	command := update.New(repo)
 
 	err := command.Execute(model.Counter, "PollCount", "2")
 	require.NoError(t, err)
@@ -43,16 +43,16 @@ func TestExecuteAccumulatesCounter(t *testing.T) {
 
 func TestExecuteReturnsErrorForUnsupportedMetricType(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	command := handler.NewUpdateMetricHandler(repo)
+	command := update.New(repo)
 
 	err := command.Execute("summary", "Alloc", "12.5")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, handler.ErrUnsupportedMetricType))
+	require.True(t, errors.Is(err, update.ErrUnsupportedMetricType))
 }
 
 func TestExecuteReturnsErrorForInvalidCounterValue(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	command := handler.NewUpdateMetricHandler(repo)
+	command := update.New(repo)
 
 	err := command.Execute(model.Counter, "PollCount", "abc")
 	require.Error(t, err)

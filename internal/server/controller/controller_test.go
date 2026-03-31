@@ -7,15 +7,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/controller"
-	"j30att/observer/internal/server/handler"
+	"j30att/observer/internal/server/handlers/get"
+	"j30att/observer/internal/server/handlers/getlist"
+	"j30att/observer/internal/server/handlers/update"
 	"j30att/observer/internal/server/repository"
 	"j30att/observer/internal/server/router"
 )
 
 func TestUpdateMetricHandlerReturnsOK(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
-	metricController := controller.NewMetricController(updateMetricCommand)
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
 	r := router.NewRouter(metricController)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/12.5", nil)
@@ -29,8 +33,10 @@ func TestUpdateMetricHandlerReturnsOK(t *testing.T) {
 
 func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
-	metricController := controller.NewMetricController(updateMetricCommand)
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
 	r := router.NewRouter(metricController)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/12.5", nil)
@@ -44,8 +50,10 @@ func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
 
 func TestUpdateMetricHandlerRejectsUnsupportedMetricType(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
-	metricController := controller.NewMetricController(updateMetricCommand)
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
 	r := router.NewRouter(metricController)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/summary/Alloc/12.5", nil)
@@ -55,13 +63,15 @@ func TestUpdateMetricHandlerRejectsUnsupportedMetricType(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), handler.ErrUnsupportedMetricType.Error())
+	require.Contains(t, rec.Body.String(), update.ErrUnsupportedMetricType.Error())
 }
 
 func TestUpdateMetricHandlerRejectsInvalidGaugeValue(t *testing.T) {
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := handler.NewUpdateMetricHandler(repo)
-	metricController := controller.NewMetricController(updateMetricCommand)
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
 	r := router.NewRouter(metricController)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/not-a-number", nil)
@@ -71,4 +81,62 @@ func TestUpdateMetricHandlerRejectsInvalidGaugeValue(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestGetMetricReturnsStoredValue(t *testing.T) {
+	repo := repository.NewMetricsRepository()
+	err := repo.SaveGauge("Alloc", 12.5)
+	require.NoError(t, err)
+
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
+	r := router.NewRouter(metricController)
+
+	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "12.5", rec.Body.String())
+}
+
+func TestGetMetricReturnsNotFoundForUnknownMetric(t *testing.T) {
+	repo := repository.NewMetricsRepository()
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
+	r := router.NewRouter(metricController)
+
+	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestListMetricsReturnsHTMLPage(t *testing.T) {
+	repo := repository.NewMetricsRepository()
+	err := repo.SaveGauge("Alloc", 12.5)
+	require.NoError(t, err)
+
+	err = repo.SaveCounter("PollCount", 3)
+	require.NoError(t, err)
+
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
+	r := router.NewRouter(metricController)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "text/html")
+	require.Contains(t, rec.Body.String(), "Alloc: 12.5")
+	require.Contains(t, rec.Body.String(), "PollCount: 3")
 }

@@ -55,3 +55,16 @@ func TestLoadReturnsErrMetricNotFoundForUnsupportedType(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, repository.ErrMetricNotFound))
 }
+
+func TestListReturnsAllSavedMetrics(t *testing.T) {
+	repo := repository.NewMetricsRepository()
+
+	err := repo.SaveGauge("Alloc", 12.5)
+	require.NoError(t, err)
+
+	err = repo.SaveCounter("PollCount", 3)
+	require.NoError(t, err)
+
+	metrics := repo.List()
+	require.Len(t, metrics, 2)
+}
