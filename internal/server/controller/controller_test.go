@@ -118,6 +118,25 @@ func TestGetMetricReturnsStoredValue(t *testing.T) {
 	require.Equal(t, "12.5", rec.Body.String())
 }
 
+func TestGetCounterReturnsStoredValue(t *testing.T) {
+	repo := repository.NewMetricsRepository()
+	err := repo.SaveCounter("PollCount", 3)
+	require.NoError(t, err)
+
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
+	r := router.NewRouter(metricController)
+
+	req := httptest.NewRequest(http.MethodGet, "/value/counter/PollCount", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "3", rec.Body.String())
+}
+
 func TestGetMetricReturnsNotFoundForUnknownMetric(t *testing.T) {
 	repo := repository.NewMetricsRepository()
 	updateMetricCommand := update.New(repo)

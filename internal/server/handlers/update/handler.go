@@ -5,16 +5,20 @@ import (
 	"strconv"
 
 	"j30att/observer/internal/server/model"
-	"j30att/observer/internal/server/repository"
 )
 
 var ErrUnsupportedMetricType = errors.New("unsupported metric type")
 
-type Handler struct {
-	repo repository.MetricsRepository
+type metricsUpdater interface {
+	SaveGauge(name string, value float64) error
+	SaveCounter(name string, delta int64) error
 }
 
-func New(repo repository.MetricsRepository) *Handler {
+type Handler struct {
+	repo metricsUpdater
+}
+
+func New(repo metricsUpdater) *Handler {
 	return &Handler{repo: repo}
 }
 

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/server/controller"
@@ -26,7 +27,16 @@ func main() {
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
 	r := router.NewRouter(metricController)
 
-	if err := http.ListenAndServe(cfg.Address, r); err != nil {
+	server := &http.Server{
+		Addr:              cfg.Address,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -12,7 +13,6 @@ import (
 	"j30att/observer/internal/server/handlers/getlist"
 	"j30att/observer/internal/server/handlers/update"
 	"j30att/observer/internal/server/model"
-	"j30att/observer/internal/server/repository"
 )
 
 type MetricController struct {
@@ -72,7 +72,7 @@ func (c *MetricController) GetMetric(w http.ResponseWriter, r *http.Request) {
 	metric, err := c.getMetricQuery.Execute(metricType, name)
 	if err != nil {
 		status := http.StatusBadRequest
-		if errors.Is(err, repository.ErrMetricNotFound) {
+		if errors.Is(err, get.ErrMetricNotFound) {
 			status = http.StatusNotFound
 		}
 
@@ -105,20 +105,12 @@ func (c *MetricController) ListMetrics(w http.ResponseWriter, _ *http.Request) {
 
 func metricValue(metric model.Metrics) string {
 	if metric.Value != nil {
-		return strconvFormatFloat(*metric.Value)
+		return strconv.FormatFloat(*metric.Value, 'g', -1, 64)
 	}
 
 	if metric.Delta != nil {
-		return strconvFormatInt(*metric.Delta)
+		return strconv.FormatInt(*metric.Delta, 10)
 	}
 
 	return ""
-}
-
-func strconvFormatFloat(value float64) string {
-	return fmt.Sprintf("%g", value)
-}
-
-func strconvFormatInt(value int64) string {
-	return fmt.Sprintf("%d", value)
 }

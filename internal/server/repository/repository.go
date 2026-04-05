@@ -10,13 +10,6 @@ import (
 
 var ErrMetricNotFound = errors.New("metric not found")
 
-type MetricsRepository interface {
-	SaveGauge(name string, value float64) error
-	SaveCounter(name string, delta int64) error
-	Load(metricType, name string) (model.Metrics, error)
-	List() []model.Metrics
-}
-
 type InMemoryMetricsRepository struct {
 	mu       sync.RWMutex
 	gauges   map[string]float64

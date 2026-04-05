@@ -2,14 +2,17 @@ package getlist
 
 import (
 	"j30att/observer/internal/server/model"
-	"j30att/observer/internal/server/repository"
 )
 
-type Handler struct {
-	repo repository.MetricsRepository
+type metricsLister interface {
+	List() []model.Metrics
 }
 
-func New(repo repository.MetricsRepository) *Handler {
+type Handler struct {
+	repo metricsLister
+}
+
+func New(repo metricsLister) *Handler {
 	return &Handler{repo: repo}
 }
 
