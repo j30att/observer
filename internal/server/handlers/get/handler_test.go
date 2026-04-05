@@ -1,7 +1,6 @@
 package get_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,5 +28,5 @@ func TestGetMetricReturnsServiceNotFoundError(t *testing.T) {
 	_, err := query.Execute(model.Gauge, "Alloc")
 
 	require.Error(t, err)
-	require.True(t, errors.Is(err, get.ErrMetricNotFound))
+	require.ErrorIs(t, err, get.ErrMetricNotFound)
 }

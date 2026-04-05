@@ -1,7 +1,6 @@
 package update_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -47,7 +46,7 @@ func TestExecuteReturnsErrorForUnsupportedMetricType(t *testing.T) {
 
 	err := command.Execute("summary", "Alloc", "12.5")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, update.ErrUnsupportedMetricType))
+	require.ErrorIs(t, err, update.ErrUnsupportedMetricType)
 }
 
 func TestExecuteReturnsErrorForInvalidCounterValue(t *testing.T) {

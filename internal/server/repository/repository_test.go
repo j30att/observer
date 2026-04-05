@@ -1,11 +1,10 @@
 package repository_test
 
 import (
-	"errors"
-	"j30att/observer/internal/server/model"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"j30att/observer/internal/server/model"
 	"j30att/observer/internal/server/repository"
 )
 
@@ -45,7 +44,7 @@ func TestLoadReturnsErrMetricNotFoundForMissingGauge(t *testing.T) {
 
 	_, err := repo.Load(model.Gauge, "UnknownMetric")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, repository.ErrMetricNotFound))
+	require.ErrorIs(t, err, repository.ErrMetricNotFound)
 }
 
 func TestLoadReturnsErrMetricNotFoundForUnsupportedType(t *testing.T) {
@@ -53,7 +52,7 @@ func TestLoadReturnsErrMetricNotFoundForUnsupportedType(t *testing.T) {
 
 	_, err := repo.Load("summary", "Alloc")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, repository.ErrMetricNotFound))
+	require.ErrorIs(t, err, repository.ErrMetricNotFound)
 }
 
 func TestListReturnsAllSavedMetrics(t *testing.T) {

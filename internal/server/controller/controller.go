@@ -54,10 +54,6 @@ func (c *MetricController) UpdateMetric(w http.ResponseWriter, r *http.Request) 
 	}
 
 	status := http.StatusBadRequest
-	if errors.Is(err, update.ErrUnsupportedMetricType) {
-		status = http.StatusBadRequest
-	}
-
 	http.Error(w, err.Error(), status)
 }
 
