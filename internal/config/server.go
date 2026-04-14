@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"io"
+	"os"
 )
 
 type ServerConfig struct {
@@ -24,6 +25,10 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 
 	if err := fs.Parse(args); err != nil {
 		return ServerConfig{}, err
+	}
+
+	if value, ok := os.LookupEnv("ADDRESS"); ok {
+		cfg.Address = value
 	}
 
 	return cfg, nil

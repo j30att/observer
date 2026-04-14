@@ -27,6 +27,24 @@ func TestParseServerConfigOverridesAddress(t *testing.T) {
 	require.Equal(t, "127.0.0.1:9000", cfg.Address)
 }
 
+func TestParseServerConfigOverridesAddressFromEnvironment(t *testing.T) {
+	t.Setenv("ADDRESS", "127.0.0.1:9100")
+
+	cfg, err := config.ParseServerConfig(nil)
+
+	require.NoError(t, err)
+	require.Equal(t, "127.0.0.1:9100", cfg.Address)
+}
+
+func TestParseServerConfigEnvironmentHasPriorityOverFlag(t *testing.T) {
+	t.Setenv("ADDRESS", "127.0.0.1:9100")
+
+	cfg, err := config.ParseServerConfig([]string{"-a=127.0.0.1:9000"})
+
+	require.NoError(t, err)
+	require.Equal(t, "127.0.0.1:9100", cfg.Address)
+}
+
 func TestParseServerConfigReturnsErrorForUnknownFlag(t *testing.T) {
 	_, err := config.ParseServerConfig([]string{"-x=value"})
 
