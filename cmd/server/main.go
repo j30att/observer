@@ -1,11 +1,13 @@
 package main
 
 import (
-	"log"
+	stdlog "log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/server/controller"
 	"j30att/observer/internal/server/handlers/get"
@@ -18,8 +20,11 @@ import (
 func main() {
 	cfg, err := config.ParseServerConfig(os.Args[1:])
 	if err != nil {
-		log.Fatal(err)
+		stdlog.Fatal(err)
 	}
+
+	log.Logger = zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
+
 	repo := repository.NewMetricsRepository()
 	updateMetricCommand := update.New(repo)
 	getMetricQuery := get.New(repo)
@@ -37,6 +42,6 @@ func main() {
 	}
 
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err)
+		stdlog.Fatal(err)
 	}
 }
