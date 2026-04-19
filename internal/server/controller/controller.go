@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -57,6 +59,43 @@ func (c *MetricController) UpdateMetric(w http.ResponseWriter, r *http.Request) 
 	http.Error(w, err.Error(), status)
 }
 
+func (c *MetricController) UpdateMetricJSON(w http.ResponseWriter, r *http.Request) {
+	if !isJSONContentType(r) {
+		http.Error(w, "content type must be application/json", http.StatusBadRequest)
+		return
+	}
+
+	metric, err := decodeMetric(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	rawValue, err := rawMetricValue(metric)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := c.updateMetricCommand.Execute(metric.MType, metric.ID, rawValue); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	savedMetric, err := c.getMetricQuery.Execute(metric.MType, metric.ID)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, get.ErrMetricNotFound) {
+			status = http.StatusNotFound
+		}
+
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, savedMetric)
+}
+
 func (c *MetricController) GetMetric(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "type")
 	name := chi.URLParam(r, "name")
@@ -79,6 +118,32 @@ func (c *MetricController) GetMetric(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(metricValue(metric)))
+}
+
+func (c *MetricController) GetMetricJSON(w http.ResponseWriter, r *http.Request) {
+	if !isJSONContentType(r) {
+		http.Error(w, "content type must be application/json", http.StatusBadRequest)
+		return
+	}
+
+	metricRequest, err := decodeMetric(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	metric, err := c.getMetricQuery.Execute(metricRequest.MType, metricRequest.ID)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, get.ErrMetricNotFound) {
+			status = http.StatusNotFound
+		}
+
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, metric)
 }
 
 func (c *MetricController) ListMetrics(w http.ResponseWriter, _ *http.Request) {
@@ -109,4 +174,55 @@ func metricValue(metric model.Metrics) string {
 	}
 
 	return ""
+}
+
+func isJSONContentType(r *http.Request) bool {
+	return r.Header.Get("Content-Type") == "application/json"
+}
+
+func decodeMetric(body io.ReadCloser) (model.Metrics, error) {
+	defer func() {
+		_ = body.Close()
+	}()
+
+	var metric model.Metrics
+	decoder := json.NewDecoder(body)
+	if err := decoder.Decode(&metric); err != nil {
+		return model.Metrics{}, err
+	}
+
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return model.Metrics{}, errors.New("request body must contain a single JSON object")
+	}
+
+	if metric.ID == "" || metric.MType == "" {
+		return model.Metrics{}, errors.New("metric id and type are required")
+	}
+
+	return metric, nil
+}
+
+func rawMetricValue(metric model.Metrics) (string, error) {
+	switch metric.MType {
+	case model.Gauge:
+		if metric.Value == nil {
+			return "", errors.New("gauge value is required")
+		}
+
+		return strconv.FormatFloat(*metric.Value, 'f', -1, 64), nil
+	case model.Counter:
+		if metric.Delta == nil {
+			return "", errors.New("counter delta is required")
+		}
+
+		return strconv.FormatInt(*metric.Delta, 10), nil
+	default:
+		return "", update.ErrUnsupportedMetricType
+	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, metric model.Metrics) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(metric)
 }

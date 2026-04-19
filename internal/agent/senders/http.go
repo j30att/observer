@@ -1,12 +1,12 @@
 package senders
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
-	"path"
-	"strconv"
 	"strings"
 
 	agentmodel "j30att/observer/internal/agent/model"
@@ -47,15 +47,23 @@ func parseBaseURL(address string) *url.URL {
 
 func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapshot) error {
 	for name, value := range snapshot.Gauges {
-		rawValue := strconv.FormatFloat(value, 'f', -1, 64)
-		if err := s.sendMetric(ctx, agentmodel.GaugeMetricType, name, rawValue); err != nil {
+		metric := agentmodel.Metrics{
+			ID:    name,
+			MType: agentmodel.GaugeMetricType,
+			Value: &value,
+		}
+		if err := s.sendMetric(ctx, metric); err != nil {
 			return err
 		}
 	}
 
 	for name, value := range snapshot.Counters {
-		rawValue := strconv.FormatInt(value, 10)
-		if err := s.sendMetric(ctx, agentmodel.CounterMetricType, name, rawValue); err != nil {
+		metric := agentmodel.Metrics{
+			ID:    name,
+			MType: agentmodel.CounterMetricType,
+			Delta: &value,
+		}
+		if err := s.sendMetric(ctx, metric); err != nil {
 			return err
 		}
 	}
@@ -63,16 +71,21 @@ func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapsh
 	return nil
 }
 
-func (s *HTTPSender) sendMetric(ctx context.Context, metricType, name, value string) error {
-	metricURL := *s.baseURL
-	metricURL.Path = path.Join(metricURL.Path, "update", metricType, name, value)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricURL.String(), nil)
+func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) error {
+	body, err := json.Marshal(metric)
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Content-Type", "text/plain")
+	metricURL := *s.baseURL
+	metricURL.Path = strings.TrimRight(metricURL.Path, "/") + "/update"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricURL.String(), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -84,6 +97,10 @@ func (s *HTTPSender) sendMetric(ctx context.Context, metricType, name, value str
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+		return fmt.Errorf("unexpected content type: %s", resp.Header.Get("Content-Type"))
 	}
 
 	return nil
