@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -177,7 +178,17 @@ func metricValue(metric model.Metrics) string {
 }
 
 func isJSONContentType(r *http.Request) bool {
-	return r.Header.Get("Content-Type") == "application/json"
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		return false
+	}
+
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+
+	return mediaType == "application/json"
 }
 
 func decodeMetric(body io.ReadCloser) (model.Metrics, error) {

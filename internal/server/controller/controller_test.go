@@ -60,6 +60,27 @@ func TestUpdateMetricJSONHandlerReturnsStoredMetric(t *testing.T) {
 	require.Equal(t, 12.5, metric["value"])
 }
 
+func TestUpdateMetricJSONHandlerAllowsTrailingSlash(t *testing.T) {
+	repo := repository.NewMetricsRepository()
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
+	r := router.NewRouter(metricController)
+
+	req := newJSONRequest(t, http.MethodPost, "/update/", map[string]any{
+		"id":    "PollCount",
+		"type":  "counter",
+		"delta": 1,
+	})
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+}
+
 func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
 	repo := repository.NewMetricsRepository()
 	updateMetricCommand := update.New(repo)
@@ -209,6 +230,28 @@ func TestGetMetricJSONReturnsStoredValue(t *testing.T) {
 	require.Equal(t, "Alloc", metric["id"])
 	require.Equal(t, "gauge", metric["type"])
 	require.Equal(t, 12.5, metric["value"])
+}
+
+func TestGetMetricJSONAllowsTrailingSlash(t *testing.T) {
+	repo := repository.NewMetricsRepository()
+	err := repo.SaveGauge("Alloc", 12.5)
+	require.NoError(t, err)
+
+	updateMetricCommand := update.New(repo)
+	getMetricQuery := get.New(repo)
+	listMetricsQuery := getlist.New(repo)
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
+	r := router.NewRouter(metricController)
+
+	req := newJSONRequest(t, http.MethodPost, "/value/", map[string]any{
+		"id":   "Alloc",
+		"type": "gauge",
+	})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 }
 
 func TestGetCounterReturnsStoredValue(t *testing.T) {
