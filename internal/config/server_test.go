@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/config"
@@ -11,6 +12,9 @@ func TestNewServerConfigReturnsDefaultValues(t *testing.T) {
 	cfg := config.NewServerConfig()
 
 	require.Equal(t, "localhost:8080", cfg.Address)
+	require.Equal(t, 300*time.Second, cfg.StoreInterval)
+	require.Equal(t, "/tmp/metrics-db.json", cfg.FileStoragePath)
+	require.True(t, cfg.Restore)
 }
 
 func TestParseServerConfigReturnsDefaultValues(t *testing.T) {
@@ -18,35 +22,93 @@ func TestParseServerConfigReturnsDefaultValues(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "localhost:8080", cfg.Address)
+	require.Equal(t, 300*time.Second, cfg.StoreInterval)
+	require.Equal(t, "/tmp/metrics-db.json", cfg.FileStoragePath)
+	require.True(t, cfg.Restore)
 }
 
-func TestParseServerConfigOverridesAddress(t *testing.T) {
-	cfg, err := config.ParseServerConfig([]string{"-a=127.0.0.1:9000"})
+func TestParseServerConfigOverridesFlags(t *testing.T) {
+	cfg, err := config.ParseServerConfig([]string{
+		"-a=127.0.0.1:9000",
+		"-i=15",
+		"-f=/tmp/custom-metrics.json",
+		"-r=false",
+	})
 
 	require.NoError(t, err)
 	require.Equal(t, "127.0.0.1:9000", cfg.Address)
+	require.Equal(t, 15*time.Second, cfg.StoreInterval)
+	require.Equal(t, "/tmp/custom-metrics.json", cfg.FileStoragePath)
+	require.False(t, cfg.Restore)
 }
 
-func TestParseServerConfigOverridesAddressFromEnvironment(t *testing.T) {
+func TestParseServerConfigOverridesValuesFromEnvironment(t *testing.T) {
 	t.Setenv("ADDRESS", "127.0.0.1:9100")
+	t.Setenv("STORE_INTERVAL", "20")
+	t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
+	t.Setenv("RESTORE", "false")
 
 	cfg, err := config.ParseServerConfig(nil)
 
 	require.NoError(t, err)
 	require.Equal(t, "127.0.0.1:9100", cfg.Address)
+	require.Equal(t, 20*time.Second, cfg.StoreInterval)
+	require.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
+	require.False(t, cfg.Restore)
 }
 
-func TestParseServerConfigEnvironmentHasPriorityOverFlag(t *testing.T) {
+func TestParseServerConfigEnvironmentHasPriorityOverFlags(t *testing.T) {
 	t.Setenv("ADDRESS", "127.0.0.1:9100")
+	t.Setenv("STORE_INTERVAL", "20")
+	t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
+	t.Setenv("RESTORE", "false")
 
-	cfg, err := config.ParseServerConfig([]string{"-a=127.0.0.1:9000"})
+	cfg, err := config.ParseServerConfig([]string{
+		"-a=127.0.0.1:9000",
+		"-i=15",
+		"-f=/tmp/custom-metrics.json",
+		"-r=true",
+	})
 
 	require.NoError(t, err)
 	require.Equal(t, "127.0.0.1:9100", cfg.Address)
+	require.Equal(t, 20*time.Second, cfg.StoreInterval)
+	require.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
+	require.False(t, cfg.Restore)
 }
 
 func TestParseServerConfigReturnsErrorForUnknownFlag(t *testing.T) {
 	_, err := config.ParseServerConfig([]string{"-x=value"})
 
 	require.EqualError(t, err, "flag provided but not defined: -x")
+}
+
+func TestParseServerConfigReturnsErrorForNegativeStoreInterval(t *testing.T) {
+	_, err := config.ParseServerConfig([]string{"-i=-1"})
+
+	require.EqualError(t, err, "invalid store interval value -1: interval must be non-negative seconds")
+}
+
+func TestParseServerConfigReturnsErrorForInvalidStoreIntervalEnv(t *testing.T) {
+	t.Setenv("STORE_INTERVAL", "abc")
+
+	_, err := config.ParseServerConfig(nil)
+
+	require.EqualError(t, err, "invalid STORE_INTERVAL value: \"abc\" is not a valid integer")
+}
+
+func TestParseServerConfigReturnsErrorForNegativeStoreIntervalEnv(t *testing.T) {
+	t.Setenv("STORE_INTERVAL", "-1")
+
+	_, err := config.ParseServerConfig(nil)
+
+	require.EqualError(t, err, "invalid store interval value -1: interval must be non-negative seconds")
+}
+
+func TestParseServerConfigReturnsErrorForInvalidRestoreEnv(t *testing.T) {
+	t.Setenv("RESTORE", "maybe")
+
+	_, err := config.ParseServerConfig(nil)
+
+	require.EqualError(t, err, "invalid RESTORE value: \"maybe\" is not a valid boolean")
 }

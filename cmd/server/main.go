@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	stdlog "log"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"j30att/observer/internal/server/handlers/update"
 	"j30att/observer/internal/server/repository"
 	"j30att/observer/internal/server/router"
+	"j30att/observer/internal/server/storage"
 )
 
 func main() {
@@ -26,9 +28,33 @@ func main() {
 	log.Logger = zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
 
 	repo := repository.NewMetricsRepository()
-	updateMetricCommand := update.New(repo)
-	getMetricQuery := get.New(repo)
-	listMetricsQuery := getlist.New(repo)
+	fileStorage := storage.NewFileStorage(cfg.FileStoragePath)
+	if cfg.Restore {
+		metrics, err := fileStorage.Load()
+		if err != nil {
+			stdlog.Fatal(err)
+		}
+
+		if err := repo.Restore(metrics); err != nil {
+			stdlog.Fatal(err)
+		}
+
+		log.Info().Int("metrics_count", len(metrics)).Msg("restored metrics")
+	}
+
+	var metricsRepo repository.MetricsRepository = repo
+	if cfg.StoreInterval > 0 {
+		periodicSaver := storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, func(err error) {
+			log.Error().Err(err).Msg("failed to save metrics")
+		})
+		go periodicSaver.Run(context.Background())
+	} else {
+		metricsRepo = repository.NewSyncPersistentRepository(repo, fileStorage)
+	}
+
+	updateMetricCommand := update.New(metricsRepo)
+	getMetricQuery := get.New(metricsRepo)
+	listMetricsQuery := getlist.New(metricsRepo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
 	r := router.NewRouter(metricController)
 
