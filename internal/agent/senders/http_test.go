@@ -1,6 +1,7 @@
 package senders
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -20,12 +21,10 @@ func TestHTTPSenderSendsGaugeAndCounterMetrics(t *testing.T) {
 		require.Equal(t, http.MethodPost, r.Method)
 		require.Equal(t, "/update", r.URL.Path)
 		require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		require.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+		require.Equal(t, "gzip", r.Header.Get("Accept-Encoding"))
 
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		defer func() {
-			_ = r.Body.Close()
-		}()
+		body := readGzipBody(t, r.Body)
 
 		var metric agentmodel.Metrics
 		require.NoError(t, json.Unmarshal(body, &metric))
@@ -117,4 +116,22 @@ func TestParseBaseURLTreatsLocalhostAddressAsHost(t *testing.T) {
 	require.Equal(t, "http", baseURL.Scheme)
 	require.Equal(t, "localhost:8080", baseURL.Host)
 	require.Empty(t, baseURL.Path)
+}
+
+func readGzipBody(t *testing.T, body io.ReadCloser) []byte {
+	t.Helper()
+	defer func() {
+		_ = body.Close()
+	}()
+
+	reader, err := gzip.NewReader(body)
+	require.NoError(t, err)
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	rawBody, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	return rawBody
 }

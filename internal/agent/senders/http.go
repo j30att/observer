@@ -2,6 +2,7 @@ package senders
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -77,6 +78,11 @@ func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) 
 		return err
 	}
 
+	body, err = compressBody(body)
+	if err != nil {
+		return err
+	}
+
 	metricURL := *s.baseURL
 	metricURL.Path = strings.TrimRight(metricURL.Path, "/") + "/update"
 
@@ -86,6 +92,8 @@ func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Accept-Encoding", "gzip")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -104,4 +112,20 @@ func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) 
 	}
 
 	return nil
+}
+
+func compressBody(body []byte) ([]byte, error) {
+	var compressed bytes.Buffer
+
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(body); err != nil {
+		_ = writer.Close()
+		return nil, err
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	return compressed.Bytes(), nil
 }

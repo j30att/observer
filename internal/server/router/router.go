@@ -13,6 +13,7 @@ func NewRouter(metricController *controller.MetricController) http.Handler {
 	r := chi.NewRouter()
 	r.Use(chimiddleware.StripSlashes)
 	r.Use(middlewares.Logger)
+	r.Use(middlewares.Gzip)
 	r.Post("/update", metricController.UpdateMetricJSON)
 	r.Post("/value", metricController.GetMetricJSON)
 	r.Post("/update/{type}/{name}/{value}", metricController.UpdateMetric)
