@@ -8,7 +8,10 @@ import (
 	"j30att/observer/internal/server/model"
 )
 
-var ErrMetricNotFound = errors.New("metric not found")
+var (
+	ErrMetricNotFound = errors.New("metric not found")
+	ErrInvalidMetric  = errors.New("invalid metric")
+)
 
 type InMemoryMetricsRepository struct {
 	mu       sync.RWMutex
@@ -69,6 +72,38 @@ func (r *InMemoryMetricsRepository) Load(metricType, name string) (model.Metrics
 	default:
 		return model.Metrics{}, ErrMetricNotFound
 	}
+}
+
+func (r *InMemoryMetricsRepository) Restore(metrics []model.Metrics) error {
+	gauges := make(map[string]float64)
+	counters := make(map[string]int64)
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case model.Gauge:
+			if metric.ID == "" || metric.Value == nil {
+				return ErrInvalidMetric
+			}
+
+			gauges[metric.ID] = *metric.Value
+		case model.Counter:
+			if metric.ID == "" || metric.Delta == nil {
+				return ErrInvalidMetric
+			}
+
+			counters[metric.ID] = *metric.Delta
+		default:
+			return ErrInvalidMetric
+		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.gauges = gauges
+	r.counters = counters
+
+	return nil
 }
 
 func (r *InMemoryMetricsRepository) List() []model.Metrics {
