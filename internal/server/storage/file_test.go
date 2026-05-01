@@ -6,14 +6,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/model"
 	"j30att/observer/internal/server/storage"
 )
 
+var testLogger = zerolog.Nop()
+
 func TestFileStorageSavesAndLoadsMetrics(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "metrics.json")
-	fileStorage := storage.NewFileStorage(path)
+	fileStorage := storage.NewFileStorage(path, testLogger)
 
 	value := 12.5
 	delta := int64(42)
@@ -32,7 +35,7 @@ func TestFileStorageSavesAndLoadsMetrics(t *testing.T) {
 
 	require.NoError(t, fileStorage.Save(metrics))
 
-	loadedMetrics, err := fileStorage.Load()
+	_, loadedMetrics, err := storage.NewRestoredFileStorage(path, testLogger)
 	require.NoError(t, err)
 	require.Len(t, loadedMetrics, 2)
 
@@ -49,7 +52,7 @@ func TestFileStorageSavesAndLoadsMetrics(t *testing.T) {
 
 func TestFileStorageSavesMetricsAsJSONArray(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "metrics.json")
-	fileStorage := storage.NewFileStorage(path)
+	fileStorage := storage.NewFileStorage(path, testLogger)
 
 	value := 12.5
 	delta := int64(42)
@@ -81,28 +84,26 @@ func TestFileStorageSavesMetricsAsJSONArray(t *testing.T) {
 
 func TestFileStorageCreatesParentDirectoriesOnSave(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "dir", "metrics.json")
-	fileStorage := storage.NewFileStorage(path)
+	fileStorage := storage.NewFileStorage(path, testLogger)
 
 	require.NoError(t, fileStorage.Save(nil))
 	require.FileExists(t, path)
 }
 
-func TestFileStorageLoadReturnsEmptyMetricsWhenFileDoesNotExist(t *testing.T) {
+func TestNewRestoredFileStorageReturnsEmptyMetricsWhenFileDoesNotExist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing.json")
-	fileStorage := storage.NewFileStorage(path)
 
-	metrics, err := fileStorage.Load()
+	_, metrics, err := storage.NewRestoredFileStorage(path, testLogger)
 
 	require.NoError(t, err)
 	require.Empty(t, metrics)
 }
 
-func TestFileStorageLoadReturnsErrorForInvalidJSON(t *testing.T) {
+func TestNewRestoredFileStorageReturnsErrorForInvalidJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "metrics.json")
 	require.NoError(t, os.WriteFile(path, []byte("not json"), 0o600))
-	fileStorage := storage.NewFileStorage(path)
 
-	_, err := fileStorage.Load()
+	_, _, err := storage.NewRestoredFileStorage(path, testLogger)
 
 	require.Error(t, err)
 }

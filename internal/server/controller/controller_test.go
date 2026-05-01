@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/controller"
 	"j30att/observer/internal/server/handlers/get"
@@ -18,13 +19,15 @@ import (
 	"j30att/observer/internal/server/router"
 )
 
+var testLogger = zerolog.Nop()
+
 func TestUpdateMetricHandlerReturnsOK(t *testing.T) {
 	repo := repository.NewMetricsRepository()
 	updateMetricCommand := update.New(repo)
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/12.5", nil)
 	req.Header.Set("Content-Type", "text/plain")
@@ -41,7 +44,7 @@ func TestUpdateMetricJSONHandlerReturnsStoredMetric(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newJSONRequest(t, http.MethodPost, "/update", map[string]any{
 		"id":    "Alloc",
@@ -68,7 +71,7 @@ func TestUpdateMetricJSONHandlerAcceptsGzipBody(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newGzipJSONRequest(t, http.MethodPost, "/update", map[string]any{
 		"id":    "Alloc",
@@ -93,7 +96,7 @@ func TestUpdateMetricJSONHandlerReturnsGzipResponse(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newJSONRequest(t, http.MethodPost, "/update", map[string]any{
 		"id":    "Alloc",
@@ -122,7 +125,7 @@ func TestUpdateMetricJSONHandlerAllowsTrailingSlash(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newJSONRequest(t, http.MethodPost, "/update/", map[string]any{
 		"id":    "PollCount",
@@ -143,7 +146,7 @@ func TestUpdateMetricHandlerRejectsWrongContentType(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/12.5", nil)
 	req.Header.Set("Content-Type", "application/json")
@@ -160,7 +163,7 @@ func TestUpdateMetricHandlerAllowsEmptyContentType(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/12.5", nil)
 
@@ -176,7 +179,7 @@ func TestUpdateMetricHandlerRejectsUnsupportedMetricType(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/summary/Alloc/12.5", nil)
 	req.Header.Set("Content-Type", "text/plain")
@@ -194,7 +197,7 @@ func TestUpdateMetricHandlerRejectsInvalidGaugeValue(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/not-a-number", nil)
 	req.Header.Set("Content-Type", "text/plain")
@@ -211,7 +214,7 @@ func TestUpdateMetricJSONHandlerRejectsWrongContentType(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodPost, "/update", bytes.NewBufferString(`{"id":"Alloc","type":"gauge","value":12.5}`))
 	req.Header.Set("Content-Type", "text/plain")
@@ -220,6 +223,7 @@ func TestUpdateMetricJSONHandlerRejectsWrongContentType(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "content type must be application/json, got text/plain")
 }
 
 func TestUpdateMetricJSONHandlerRejectsMissingValue(t *testing.T) {
@@ -228,7 +232,7 @@ func TestUpdateMetricJSONHandlerRejectsMissingValue(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newJSONRequest(t, http.MethodPost, "/update", map[string]any{
 		"id":   "Alloc",
@@ -250,7 +254,7 @@ func TestGetMetricReturnsStoredValue(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
 	rec := httptest.NewRecorder()
@@ -269,7 +273,7 @@ func TestGetMetricDoesNotCompressTextPlainResponse(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
@@ -290,7 +294,7 @@ func TestGetMetricJSONReturnsStoredValue(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newJSONRequest(t, http.MethodPost, "/value", map[string]any{
 		"id":   "Alloc",
@@ -318,7 +322,7 @@ func TestGetMetricJSONReturnsGzipResponse(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newJSONRequest(t, http.MethodPost, "/value", map[string]any{
 		"id":   "Alloc",
@@ -347,7 +351,7 @@ func TestGetMetricJSONAllowsTrailingSlash(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newJSONRequest(t, http.MethodPost, "/value/", map[string]any{
 		"id":   "Alloc",
@@ -369,7 +373,7 @@ func TestGetCounterReturnsStoredValue(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/value/counter/PollCount", nil)
 	rec := httptest.NewRecorder()
@@ -385,7 +389,7 @@ func TestGetMetricReturnsNotFoundForUnknownMetric(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
 	rec := httptest.NewRecorder()
@@ -400,7 +404,7 @@ func TestGetMetricJSONReturnsNotFoundForUnknownMetric(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := newJSONRequest(t, http.MethodPost, "/value", map[string]any{
 		"id":   "Alloc",
@@ -424,7 +428,7 @@ func TestListMetricsReturnsHTMLPage(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -448,7 +452,7 @@ func TestListMetricsReturnsGzipHTMLPage(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
@@ -469,7 +473,7 @@ func TestGzipMiddlewareRejectsInvalidGzipBody(t *testing.T) {
 	getMetricQuery := get.New(repo)
 	listMetricsQuery := getlist.New(repo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, testLogger)
 
 	req := httptest.NewRequest(http.MethodPost, "/update", bytes.NewBufferString("not gzip"))
 	req.Header.Set("Content-Type", "application/json")

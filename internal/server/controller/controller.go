@@ -61,10 +61,13 @@ func (c *MetricController) UpdateMetric(w http.ResponseWriter, r *http.Request) 
 }
 
 func (c *MetricController) UpdateMetricJSON(w http.ResponseWriter, r *http.Request) {
-	if !isJSONContentType(r) {
-		http.Error(w, "content type must be application/json", http.StatusBadRequest)
+	if err := validateJSONContentType(r); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	defer func() {
+		_ = r.Body.Close()
+	}()
 
 	metric, err := decodeMetric(r.Body)
 	if err != nil {
@@ -122,10 +125,13 @@ func (c *MetricController) GetMetric(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *MetricController) GetMetricJSON(w http.ResponseWriter, r *http.Request) {
-	if !isJSONContentType(r) {
-		http.Error(w, "content type must be application/json", http.StatusBadRequest)
+	if err := validateJSONContentType(r); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	defer func() {
+		_ = r.Body.Close()
+	}()
 
 	metricRequest, err := decodeMetric(r.Body)
 	if err != nil {
@@ -177,25 +183,25 @@ func metricValue(metric model.Metrics) string {
 	return ""
 }
 
-func isJSONContentType(r *http.Request) bool {
+func validateJSONContentType(r *http.Request) error {
 	contentType := r.Header.Get("Content-Type")
 	if contentType == "" {
-		return false
+		return errors.New("content type is required")
 	}
 
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		return false
+		return fmt.Errorf("parse content type %q: %w", contentType, err)
 	}
 
-	return mediaType == "application/json"
+	if mediaType != "application/json" {
+		return fmt.Errorf("content type must be application/json, got %s", mediaType)
+	}
+
+	return nil
 }
 
-func decodeMetric(body io.ReadCloser) (model.Metrics, error) {
-	defer func() {
-		_ = body.Close()
-	}()
-
+func decodeMetric(body io.Reader) (model.Metrics, error) {
 	var metric model.Metrics
 	decoder := json.NewDecoder(body)
 	if err := decoder.Decode(&metric); err != nil {

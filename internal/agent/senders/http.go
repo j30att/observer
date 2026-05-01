@@ -2,7 +2,6 @@ package senders
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	agentmodel "j30att/observer/internal/agent/model"
+	"j30att/observer/internal/compression"
 )
 
 type HTTPSender struct {
@@ -54,7 +54,7 @@ func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapsh
 			Value: &value,
 		}
 		if err := s.sendMetric(ctx, metric); err != nil {
-			return err
+			return fmt.Errorf("send gauge metric %q: %w", name, err)
 		}
 	}
 
@@ -65,7 +65,7 @@ func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapsh
 			Delta: &value,
 		}
 		if err := s.sendMetric(ctx, metric); err != nil {
-			return err
+			return fmt.Errorf("send counter metric %q: %w", name, err)
 		}
 	}
 
@@ -75,12 +75,12 @@ func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapsh
 func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) error {
 	body, err := json.Marshal(metric)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal metric: %w", err)
 	}
 
-	body, err = compressBody(body)
+	body, err = compression.CompressGzip(body)
 	if err != nil {
-		return err
+		return fmt.Errorf("compress metric body: %w", err)
 	}
 
 	metricURL := *s.baseURL
@@ -88,16 +88,16 @@ func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricURL.String(), bytes.NewReader(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("create metric update request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Content-Encoding", "gzip")
-	req.Header.Set("Accept-Encoding", "gzip")
+	req.Header.Set("Content-Encoding", compression.GzipEncoding)
+	req.Header.Set("Accept-Encoding", compression.GzipEncoding)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("send metric update request: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -112,20 +112,4 @@ func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) 
 	}
 
 	return nil
-}
-
-func compressBody(body []byte) ([]byte, error) {
-	var compressed bytes.Buffer
-
-	writer := gzip.NewWriter(&compressed)
-	if _, err := writer.Write(body); err != nil {
-		_ = writer.Close()
-		return nil, err
-	}
-
-	if err := writer.Close(); err != nil {
-		return nil, err
-	}
-
-	return compressed.Bytes(), nil
 }
