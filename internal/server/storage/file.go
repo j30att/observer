@@ -6,15 +6,30 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/rs/zerolog"
 	"j30att/observer/internal/server/model"
 )
 
 type FileStorage struct {
-	path string
+	path   string
+	logger zerolog.Logger
 }
 
-func NewFileStorage(path string) *FileStorage {
-	return &FileStorage{path: path}
+func NewFileStorage(path string, logger zerolog.Logger) *FileStorage {
+	return &FileStorage{
+		path:   path,
+		logger: logger,
+	}
+}
+
+func NewRestoredFileStorage(path string, logger zerolog.Logger) (*FileStorage, []model.Metrics, error) {
+	storage := NewFileStorage(path, logger)
+	metrics, err := storage.load()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return storage, metrics, nil
 }
 
 func (s *FileStorage) Save(metrics []model.Metrics) error {
@@ -32,7 +47,9 @@ func (s *FileStorage) Save(metrics []model.Metrics) error {
 	removeTmp := true
 	defer func() {
 		if removeTmp {
-			_ = os.Remove(tmpPath)
+			if err := os.Remove(tmpPath); err != nil {
+				s.logger.Error().Err(err).Str("path", tmpPath).Msg("failed to remove temporary metrics file")
+			}
 		}
 	}()
 
@@ -54,7 +71,7 @@ func (s *FileStorage) Save(metrics []model.Metrics) error {
 	return nil
 }
 
-func (s *FileStorage) Load() ([]model.Metrics, error) {
+func (s *FileStorage) load() ([]model.Metrics, error) {
 	file, err := os.Open(s.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

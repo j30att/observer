@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/middlewares"
 )
@@ -16,13 +15,8 @@ import (
 func TestLoggerWritesRequestAndResponseFields(t *testing.T) {
 	var output bytes.Buffer
 
-	oldLogger := log.Logger
-	log.Logger = zerolog.New(&output).Level(zerolog.InfoLevel)
-	defer func() {
-		log.Logger = oldLogger
-	}()
-
-	handler := middlewares.Logger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	logger := zerolog.New(&output).Level(zerolog.InfoLevel)
+	handler := middlewares.Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		_, err := w.Write([]byte("hello"))
 		require.NoError(t, err)
@@ -45,4 +39,26 @@ func TestLoggerWritesRequestAndResponseFields(t *testing.T) {
 	require.EqualValues(t, http.StatusCreated, entry["status"])
 	require.EqualValues(t, len("hello"), entry["response_size"])
 	require.Contains(t, entry, "duration")
+}
+
+func TestLoggerWritesOKStatusWhenHandlerDoesNotSetStatusExplicitly(t *testing.T) {
+	var output bytes.Buffer
+
+	logger := zerolog.New(&output).Level(zerolog.InfoLevel)
+	handler := middlewares.Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := w.Write([]byte("hello"))
+		require.NoError(t, err)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+	require.EqualValues(t, http.StatusOK, entry["status"])
+	require.EqualValues(t, len("hello"), entry["response_size"])
 }

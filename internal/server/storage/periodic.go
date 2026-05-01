@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/rs/zerolog"
 	"j30att/observer/internal/server/model"
 )
 
@@ -19,15 +20,15 @@ type PeriodicSaver struct {
 	interval time.Duration
 	source   MetricsLister
 	target   MetricsSaver
-	onError  func(error)
+	logger   zerolog.Logger
 }
 
-func NewPeriodicSaver(interval time.Duration, source MetricsLister, target MetricsSaver, onError func(error)) *PeriodicSaver {
+func NewPeriodicSaver(interval time.Duration, source MetricsLister, target MetricsSaver, logger zerolog.Logger) *PeriodicSaver {
 	return &PeriodicSaver{
 		interval: interval,
 		source:   source,
 		target:   target,
-		onError:  onError,
+		logger:   logger,
 	}
 }
 
@@ -48,8 +49,8 @@ func (s *PeriodicSaver) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := s.Save(); err != nil && s.onError != nil {
-				s.onError(err)
+			if err := s.Save(); err != nil {
+				s.logger.Error().Err(err).Msg("failed to save metrics")
 			}
 		}
 	}

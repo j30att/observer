@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/server/controller"
 	"j30att/observer/internal/server/handlers/get"
 	"j30att/observer/internal/server/handlers/getlist"
 	"j30att/observer/internal/server/handlers/update"
+	"j30att/observer/internal/server/model"
 	"j30att/observer/internal/server/repository"
 	"j30att/observer/internal/server/router"
 	"j30att/observer/internal/server/storage"
@@ -25,28 +25,29 @@ func main() {
 		stdlog.Fatal(err)
 	}
 
-	log.Logger = zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
+	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
 
 	repo := repository.NewMetricsRepository()
-	fileStorage := storage.NewFileStorage(cfg.FileStoragePath)
+	var fileStorage *storage.FileStorage
 	if cfg.Restore {
-		metrics, err := fileStorage.Load()
+		var metrics []model.Metrics
+		fileStorage, metrics, err = storage.NewRestoredFileStorage(cfg.FileStoragePath, logger)
 		if err != nil {
-			stdlog.Fatal(err)
+			logger.Fatal().Err(err).Msg("failed to restore metrics from file")
 		}
 
 		if err := repo.Restore(metrics); err != nil {
-			stdlog.Fatal(err)
+			logger.Fatal().Err(err).Msg("failed to restore metrics repository")
 		}
 
-		log.Info().Int("metrics_count", len(metrics)).Msg("restored metrics")
+		logger.Info().Int("metrics_count", len(metrics)).Msg("restored metrics")
+	} else {
+		fileStorage = storage.NewFileStorage(cfg.FileStoragePath, logger)
 	}
 
 	var metricsRepo repository.MetricsRepository = repo
 	if cfg.StoreInterval > 0 {
-		periodicSaver := storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, func(err error) {
-			log.Error().Err(err).Msg("failed to save metrics")
-		})
+		periodicSaver := storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, logger)
 		go periodicSaver.Run(context.Background())
 	} else {
 		metricsRepo = repository.NewSyncPersistentRepository(repo, fileStorage)
@@ -56,7 +57,7 @@ func main() {
 	getMetricQuery := get.New(metricsRepo)
 	listMetricsQuery := getlist.New(metricsRepo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController)
+	r := router.NewRouter(metricController, logger)
 
 	server := &http.Server{
 		Addr:              cfg.Address,
@@ -68,6 +69,6 @@ func main() {
 	}
 
 	if err := server.ListenAndServe(); err != nil {
-		stdlog.Fatal(err)
+		logger.Fatal().Err(err).Msg("server stopped")
 	}
 }
