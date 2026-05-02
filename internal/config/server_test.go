@@ -15,6 +15,7 @@ func TestNewServerConfigReturnsDefaultValues(t *testing.T) {
 	require.Equal(t, 300*time.Second, cfg.StoreInterval)
 	require.Equal(t, "/tmp/metrics-db.json", cfg.FileStoragePath)
 	require.True(t, cfg.Restore)
+	require.Empty(t, cfg.DatabaseDSN)
 }
 
 func TestParseServerConfigReturnsDefaultValues(t *testing.T) {
@@ -25,6 +26,7 @@ func TestParseServerConfigReturnsDefaultValues(t *testing.T) {
 	require.Equal(t, 300*time.Second, cfg.StoreInterval)
 	require.Equal(t, "/tmp/metrics-db.json", cfg.FileStoragePath)
 	require.True(t, cfg.Restore)
+	require.Empty(t, cfg.DatabaseDSN)
 }
 
 func TestParseServerConfigOverridesFlags(t *testing.T) {
@@ -33,6 +35,7 @@ func TestParseServerConfigOverridesFlags(t *testing.T) {
 		"-i=15",
 		"-f=/tmp/custom-metrics.json",
 		"-r=false",
+		"-d=postgres://user:password@example.com:5432/observer?sslmode=require",
 	})
 
 	require.NoError(t, err)
@@ -40,6 +43,7 @@ func TestParseServerConfigOverridesFlags(t *testing.T) {
 	require.Equal(t, 15*time.Second, cfg.StoreInterval)
 	require.Equal(t, "/tmp/custom-metrics.json", cfg.FileStoragePath)
 	require.False(t, cfg.Restore)
+	require.Equal(t, "postgres://user:password@example.com:5432/observer?sslmode=require", cfg.DatabaseDSN)
 }
 
 func TestParseServerConfigOverridesValuesFromEnvironment(t *testing.T) {
@@ -47,6 +51,7 @@ func TestParseServerConfigOverridesValuesFromEnvironment(t *testing.T) {
 	t.Setenv("STORE_INTERVAL", "20")
 	t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
 	t.Setenv("RESTORE", "false")
+	t.Setenv("DATABASE_DSN", "postgres://env-dsn")
 
 	cfg, err := config.ParseServerConfig(nil)
 
@@ -55,6 +60,7 @@ func TestParseServerConfigOverridesValuesFromEnvironment(t *testing.T) {
 	require.Equal(t, 20*time.Second, cfg.StoreInterval)
 	require.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
 	require.False(t, cfg.Restore)
+	require.Equal(t, "postgres://env-dsn", cfg.DatabaseDSN)
 }
 
 func TestParseServerConfigEnvironmentHasPriorityOverFlags(t *testing.T) {
@@ -62,12 +68,14 @@ func TestParseServerConfigEnvironmentHasPriorityOverFlags(t *testing.T) {
 	t.Setenv("STORE_INTERVAL", "20")
 	t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
 	t.Setenv("RESTORE", "false")
+	t.Setenv("DATABASE_DSN", "postgres://env-dsn")
 
 	cfg, err := config.ParseServerConfig([]string{
 		"-a=127.0.0.1:9000",
 		"-i=15",
 		"-f=/tmp/custom-metrics.json",
 		"-r=true",
+		"-d=postgres://flag-dsn",
 	})
 
 	require.NoError(t, err)
@@ -75,6 +83,7 @@ func TestParseServerConfigEnvironmentHasPriorityOverFlags(t *testing.T) {
 	require.Equal(t, 20*time.Second, cfg.StoreInterval)
 	require.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
 	require.False(t, cfg.Restore)
+	require.Equal(t, "postgres://env-dsn", cfg.DatabaseDSN)
 }
 
 func TestParseServerConfigReturnsErrorForUnknownFlag(t *testing.T) {

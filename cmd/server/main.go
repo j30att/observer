@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	stdlog "log"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/server/controller"
@@ -20,12 +23,25 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		stdlog.Fatal(err)
+	}
+
 	cfg, err := config.ParseServerConfig(os.Args[1:])
 	if err != nil {
 		stdlog.Fatal(err)
 	}
 
 	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
+
+	var db *sql.DB
+	if cfg.DatabaseDSN != "" {
+		db, err = sql.Open("postgres", cfg.DatabaseDSN)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to open database")
+		}
+		defer db.Close()
+	}
 
 	repo := repository.NewMetricsRepository()
 	var fileStorage *storage.FileStorage
@@ -58,6 +74,9 @@ func main() {
 	listMetricsQuery := getlist.New(metricsRepo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
 	r := router.NewRouter(metricController, logger)
+	if db != nil {
+		r = router.NewRouter(metricController, logger, db)
+	}
 
 	server := &http.Server{
 		Addr:              cfg.Address,
