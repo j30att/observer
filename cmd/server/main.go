@@ -37,15 +37,20 @@ func main() {
 
 	var db *sql.DB
 	if cfg.DatabaseDSN != "" {
+		migrationDB, err := sql.Open("postgres", cfg.DatabaseDSN)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to open database")
+		}
+
+		if err := migrations.Up(migrationDB); err != nil {
+			logger.Fatal().Err(err).Msg("failed to apply database migrations")
+		}
+
 		db, err = sql.Open("postgres", cfg.DatabaseDSN)
 		if err != nil {
 			logger.Fatal().Err(err).Msg("failed to open database")
 		}
 		defer db.Close()
-
-		if err := migrations.Up(db); err != nil {
-			logger.Fatal().Err(err).Msg("failed to apply database migrations")
-		}
 	}
 
 	var metricsRepo repository.MetricsRepository
