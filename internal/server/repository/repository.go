@@ -42,6 +42,45 @@ func (r *InMemoryMetricsRepository) SaveCounter(name string, delta int64) error 
 	return nil
 }
 
+func (r *InMemoryMetricsRepository) SaveBatch(metrics []model.Metrics) error {
+	for _, metric := range metrics {
+		if err := validateMetric(metric); err != nil {
+			return err
+		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case model.Gauge:
+			r.gauges[metric.ID] = *metric.Value
+		case model.Counter:
+			r.counters[metric.ID] += *metric.Delta
+		}
+	}
+
+	return nil
+}
+
+func validateMetric(metric model.Metrics) error {
+	switch metric.MType {
+	case model.Gauge:
+		if metric.ID == "" || metric.Value == nil {
+			return ErrInvalidMetric
+		}
+	case model.Counter:
+		if metric.ID == "" || metric.Delta == nil {
+			return ErrInvalidMetric
+		}
+	default:
+		return ErrInvalidMetric
+	}
+
+	return nil
+}
+
 func (r *InMemoryMetricsRepository) Load(metricType, name string) (model.Metrics, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

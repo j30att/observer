@@ -100,6 +100,29 @@ func (c *MetricController) UpdateMetricJSON(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, savedMetric)
 }
 
+func (c *MetricController) UpdateMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	if err := validateJSONContentType(r); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer func() {
+		_ = r.Body.Close()
+	}()
+
+	metrics, err := decodeMetrics(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := c.updateMetricCommand.ExecuteBatch(metrics); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, metrics)
+}
+
 func (c *MetricController) GetMetric(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "type")
 	name := chi.URLParam(r, "name")
@@ -202,21 +225,57 @@ func validateJSONContentType(r *http.Request) error {
 }
 
 func decodeMetric(body io.Reader) (model.Metrics, error) {
-	var metric model.Metrics
-	decoder := json.NewDecoder(body)
-	if err := decoder.Decode(&metric); err != nil {
+	metric, err := decodeJSON[model.Metrics](body, "request body must contain a single JSON object")
+	if err != nil {
 		return model.Metrics{}, err
 	}
 
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return model.Metrics{}, errors.New("request body must contain a single JSON object")
-	}
-
-	if metric.ID == "" || metric.MType == "" {
+	if err := validateMetricIdentity(metric); err != nil {
 		return model.Metrics{}, errors.New("metric id and type are required")
 	}
 
 	return metric, nil
+}
+
+func decodeMetrics(body io.Reader) ([]model.Metrics, error) {
+	metrics, err := decodeJSON[[]model.Metrics](body, "request body must contain a single JSON array")
+	if err != nil {
+		return nil, err
+	}
+
+	if metrics == nil {
+		return nil, errors.New("request body must contain a JSON array")
+	}
+
+	for _, metric := range metrics {
+		if err := validateMetricIdentity(metric); err != nil {
+			return nil, errors.New("metric id and type are required")
+		}
+	}
+
+	return metrics, nil
+}
+
+func decodeJSON[T any](body io.Reader, extraValueError string) (T, error) {
+	var payload T
+	decoder := json.NewDecoder(body)
+	if err := decoder.Decode(&payload); err != nil {
+		return payload, err
+	}
+
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return payload, errors.New(extraValueError)
+	}
+
+	return payload, nil
+}
+
+func validateMetricIdentity(metric model.Metrics) error {
+	if metric.ID == "" || metric.MType == "" {
+		return errors.New("metric id and type are required")
+	}
+
+	return nil
 }
 
 func rawMetricValue(metric model.Metrics) (string, error) {
@@ -238,8 +297,8 @@ func rawMetricValue(metric model.Metrics) (string, error) {
 	}
 }
 
-func writeJSON(w http.ResponseWriter, status int, metric model.Metrics) {
+func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(metric)
+	_ = json.NewEncoder(w).Encode(payload)
 }

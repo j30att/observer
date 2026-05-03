@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"j30att/observer/internal/server/model"
 )
@@ -55,6 +56,100 @@ func (r *PostgresMetricsRepository) SaveCounter(name string, delta int64) error 
 	}
 
 	return nil
+}
+
+func (r *PostgresMetricsRepository) SaveBatch(metrics []model.Metrics) error {
+	metrics, err := compactMetrics(metrics)
+	if err != nil {
+		return err
+	}
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	values := make([]string, 0, len(metrics))
+	args := make([]any, 0, len(metrics)*4)
+	for i, metric := range metrics {
+		values = append(values, fmt.Sprintf("($%d, $%d, $%d, $%d)", i*4+1, i*4+2, i*4+3, i*4+4))
+		switch metric.MType {
+		case model.Gauge:
+			args = append(args, metric.ID, model.Gauge, nil, *metric.Value)
+		case model.Counter:
+			args = append(args, metric.ID, model.Counter, *metric.Delta, nil)
+		}
+	}
+
+	_, err = r.db.ExecContext(
+		context.Background(),
+		`
+			INSERT INTO metrics (id, type, delta, value)
+			VALUES `+strings.Join(values, ",")+`
+			ON CONFLICT (id, type)
+			DO UPDATE SET
+				delta = CASE
+					WHEN EXCLUDED.type = 'counter' THEN metrics.delta + EXCLUDED.delta
+					ELSE NULL
+				END,
+				value = CASE
+					WHEN EXCLUDED.type = 'gauge' THEN EXCLUDED.value
+					ELSE NULL
+				END
+		`,
+		args...,
+	)
+	if err != nil {
+		return fmt.Errorf("save batch metrics: %w", err)
+	}
+
+	return nil
+}
+
+func compactMetrics(metrics []model.Metrics) ([]model.Metrics, error) {
+	type metricKey struct {
+		id    string
+		mType string
+	}
+
+	compacted := make(map[metricKey]model.Metrics, len(metrics))
+	order := make([]metricKey, 0, len(metrics))
+	for _, metric := range metrics {
+		key := metricKey{id: metric.ID, mType: metric.MType}
+		switch metric.MType {
+		case model.Gauge:
+			if metric.ID == "" || metric.Value == nil {
+				return nil, ErrInvalidMetric
+			}
+		case model.Counter:
+			if metric.ID == "" || metric.Delta == nil {
+				return nil, ErrInvalidMetric
+			}
+		default:
+			return nil, ErrInvalidMetric
+		}
+
+		current, ok := compacted[key]
+		if !ok {
+			order = append(order, key)
+			compacted[key] = metric
+			continue
+		}
+
+		switch metric.MType {
+		case model.Gauge:
+			compacted[key] = metric
+		case model.Counter:
+			delta := *current.Delta + *metric.Delta
+			current.Delta = &delta
+			compacted[key] = current
+		}
+	}
+
+	result := make([]model.Metrics, 0, len(compacted))
+	for _, key := range order {
+		result = append(result, compacted[key])
+	}
+
+	return result, nil
 }
 
 func (r *PostgresMetricsRepository) Load(metricType, name string) (model.Metrics, error) {

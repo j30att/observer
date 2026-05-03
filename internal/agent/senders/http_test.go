@@ -18,18 +18,16 @@ import (
 func TestHTTPSender(t *testing.T) {
 	t.Run("Тест метода Send", func(t *testing.T) {
 		t.Run("Должен отправить gauge и counter метрики", func(t *testing.T) {
-			var requests []agentmodel.Metrics
+			var request []agentmodel.Metrics
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodPost, r.Method)
-				assert.Equal(t, "/update", r.URL.Path)
+				assert.Equal(t, "/updates", r.URL.Path)
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
 				assert.Equal(t, "gzip", r.Header.Get("Accept-Encoding"))
 
 				body := readGzipBody(t, r.Body)
-				var metric agentmodel.Metrics
-				require.NoError(t, json.Unmarshal(body, &metric))
-				requests = append(requests, metric)
+				require.NoError(t, json.Unmarshal(body, &request))
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -43,9 +41,9 @@ func TestHTTPSender(t *testing.T) {
 			err := sender.Send(context.Background(), snapshot)
 
 			require.NoError(t, err)
-			require.Len(t, requests, 2)
-			assert.ElementsMatch(t, []string{"Alloc", "PollCount"}, []string{requests[0].ID, requests[1].ID})
-			for _, metric := range requests {
+			require.Len(t, request, 2)
+			assert.ElementsMatch(t, []string{"Alloc", "PollCount"}, []string{request[0].ID, request[1].ID})
+			for _, metric := range request {
 				switch metric.ID {
 				case "Alloc":
 					assert.Equal(t, agentmodel.GaugeMetricType, metric.MType)
@@ -110,7 +108,23 @@ func TestHTTPSender(t *testing.T) {
 			err := sender.Send(context.Background(), snapshot)
 
 			require.NoError(t, err)
-			assert.Equal(t, "/update", requestedPath)
+			assert.Equal(t, "/updates", requestedPath)
+		})
+
+		t.Run("Не должен отправлять пустой batch", func(t *testing.T) {
+			requestsCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requestsCount++
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			sender := NewHTTPSender(server.URL)
+
+			err := sender.Send(context.Background(), agentmodel.NewMetricsSnapshot())
+
+			require.NoError(t, err)
+			assert.Zero(t, requestsCount)
 		})
 	})
 

@@ -5,6 +5,7 @@ import "j30att/observer/internal/server/model"
 type MetricsRepository interface {
 	SaveGauge(name string, value float64) error
 	SaveCounter(name string, delta int64) error
+	SaveBatch(metrics []model.Metrics) error
 	Load(metricType, name string) (model.Metrics, error)
 	List() []model.Metrics
 }
@@ -35,6 +36,14 @@ func (r *SyncPersistentRepository) SaveGauge(name string, value float64) error {
 
 func (r *SyncPersistentRepository) SaveCounter(name string, delta int64) error {
 	if err := r.repo.SaveCounter(name, delta); err != nil {
+		return err
+	}
+
+	return r.saver.Save(r.repo.List())
+}
+
+func (r *SyncPersistentRepository) SaveBatch(metrics []model.Metrics) error {
+	if err := r.repo.SaveBatch(metrics); err != nil {
 		return err
 	}
 

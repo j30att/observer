@@ -87,6 +87,26 @@ func TestSyncPersistentRepository(t *testing.T) {
 		})
 	})
 
+	t.Run("Тест метода SaveBatch", func(t *testing.T) {
+		t.Run("Должен сохранить batch и snapshot один раз", func(t *testing.T) {
+			setup(t)
+
+			value := 12.5
+			delta := int64(2)
+			batch := []model.Metrics{
+				{ID: "Alloc", MType: model.Gauge, Value: &value},
+				{ID: "PollCount", MType: model.Counter, Delta: &delta},
+			}
+			repo.EXPECT().SaveBatch(batch).Return(nil)
+			repo.EXPECT().List().Return(batch)
+			saver.EXPECT().Save(batch).Return(nil)
+
+			err := persistentRepo.SaveBatch(batch)
+
+			require.NoError(t, err)
+		})
+	})
+
 	t.Run("Тест делегирования", func(t *testing.T) {
 		t.Run("Должен делегировать Load", func(t *testing.T) {
 			setup(t)

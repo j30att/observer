@@ -21,6 +21,52 @@ func (_m *MockMetricsRepository) EXPECT() *MockMetricsRepository_Expecter {
 	return &MockMetricsRepository_Expecter{mock: &_m.Mock}
 }
 
+// SaveBatch provides a mock function with given fields: metrics
+func (_m *MockMetricsRepository) SaveBatch(metrics []model.Metrics) error {
+	ret := _m.Called(metrics)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SaveBatch")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]model.Metrics) error); ok {
+		r0 = rf(metrics)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockMetricsRepository_SaveBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SaveBatch'
+type MockMetricsRepository_SaveBatch_Call struct {
+	*mock.Call
+}
+
+// SaveBatch is a helper method to define mock.On call
+//   - metrics []model.Metrics
+func (_e *MockMetricsRepository_Expecter) SaveBatch(metrics interface{}) *MockMetricsRepository_SaveBatch_Call {
+	return &MockMetricsRepository_SaveBatch_Call{Call: _e.mock.On("SaveBatch", metrics)}
+}
+
+func (_c *MockMetricsRepository_SaveBatch_Call) Run(run func(metrics []model.Metrics)) *MockMetricsRepository_SaveBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]model.Metrics))
+	})
+	return _c
+}
+
+func (_c *MockMetricsRepository_SaveBatch_Call) Return(_a0 error) *MockMetricsRepository_SaveBatch_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockMetricsRepository_SaveBatch_Call) RunAndReturn(run func([]model.Metrics) error) *MockMetricsRepository_SaveBatch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // List provides a mock function with no fields
 func (_m *MockMetricsRepository) List() []model.Metrics {
 	ret := _m.Called()

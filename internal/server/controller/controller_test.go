@@ -89,6 +89,31 @@ func TestMetricController(t *testing.T) {
 			assert.Equal(t, 12.5, *metric.Value)
 		})
 
+		t.Run("Должен принять batch JSON update", func(t *testing.T) {
+			setup(t)
+
+			req := newJSONRequest(t, http.MethodPost, "/updates/", []map[string]any{
+				{"id": "Alloc", "type": "gauge", "value": 12.5},
+				{"id": "PollCount", "type": "counter", "delta": 2},
+			})
+			rec := httptest.NewRecorder()
+
+			r.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+			gauge, err := repo.Load("gauge", "Alloc")
+			require.NoError(t, err)
+			require.NotNil(t, gauge.Value)
+			assert.Equal(t, 12.5, *gauge.Value)
+
+			counter, err := repo.Load("counter", "PollCount")
+			require.NoError(t, err)
+			require.NotNil(t, counter.Delta)
+			assert.EqualValues(t, 2, *counter.Delta)
+		})
+
 		t.Run("Должен вернуть gzip response", func(t *testing.T) {
 			setup(t)
 

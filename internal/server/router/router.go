@@ -22,6 +22,7 @@ func NewRouter(metricController *controller.MetricController, logger zerolog.Log
 	}
 	pingHandler := ping.New(dbPinger)
 	r.Get("/ping", pingHandler.Ping)
+	r.Post("/updates", metricController.UpdateMetricsJSON)
 	r.Post("/update", metricController.UpdateMetricJSON)
 	r.Post("/value", metricController.GetMetricJSON)
 	r.Post("/update/{type}/{name}/{value}", metricController.UpdateMetric)

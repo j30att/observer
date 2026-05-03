@@ -76,4 +76,31 @@ func TestUpdateMetricHandler(t *testing.T) {
 			assert.ErrorIs(t, err, saveErr)
 		})
 	})
+
+	t.Run("Тест метода ExecuteBatch", func(t *testing.T) {
+		t.Run("Должен сохранить batch", func(t *testing.T) {
+			setup(t)
+
+			value := 12.5
+			delta := int64(2)
+			metrics := []model.Metrics{
+				{ID: "Alloc", MType: model.Gauge, Value: &value},
+				{ID: "PollCount", MType: model.Counter, Delta: &delta},
+			}
+			repo.EXPECT().SaveBatch(metrics).Return(nil)
+
+			err := handler.ExecuteBatch(metrics)
+
+			require.NoError(t, err)
+		})
+
+		t.Run("Должен отклонить невалидную метрику до сохранения", func(t *testing.T) {
+			setup(t)
+
+			err := handler.ExecuteBatch([]model.Metrics{{ID: "Alloc", MType: model.Gauge}})
+
+			require.ErrorIs(t, err, update.ErrUnsupportedMetricType)
+			repo.AssertNotCalled(t, "SaveBatch", mock.Anything)
+		})
+	})
 }

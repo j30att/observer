@@ -12,6 +12,7 @@ var ErrUnsupportedMetricType = errors.New("unsupported metric type")
 type metricsUpdater interface {
 	SaveGauge(name string, value float64) error
 	SaveCounter(name string, delta int64) error
+	SaveBatch(metrics []model.Metrics) error
 }
 
 type Handler struct {
@@ -41,4 +42,35 @@ func (h *Handler) Execute(metricType, name, rawValue string) error {
 	default:
 		return ErrUnsupportedMetricType
 	}
+}
+
+func (h *Handler) ExecuteBatch(metrics []model.Metrics) error {
+	for _, metric := range metrics {
+		if err := validateMetric(metric); err != nil {
+			return err
+		}
+	}
+
+	return h.repo.SaveBatch(metrics)
+}
+
+func validateMetric(metric model.Metrics) error {
+	if metric.ID == "" {
+		return ErrUnsupportedMetricType
+	}
+
+	switch metric.MType {
+	case model.Gauge:
+		if metric.Value == nil {
+			return ErrUnsupportedMetricType
+		}
+	case model.Counter:
+		if metric.Delta == nil {
+			return ErrUnsupportedMetricType
+		}
+	default:
+		return ErrUnsupportedMetricType
+	}
+
+	return nil
 }

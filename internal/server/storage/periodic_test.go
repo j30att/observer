@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,32 @@ import (
 	"j30att/observer/internal/server/storage"
 	storagemocks "j30att/observer/internal/server/storage/mocks"
 )
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) Read(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.Read(p)
+}
+
+func (b *lockedBuffer) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.Len()
+}
 
 func TestPeriodicSaver(t *testing.T) {
 	var (
@@ -100,7 +127,7 @@ func TestPeriodicSaver(t *testing.T) {
 		t.Run("Должен залогировать ошибку сохранения", func(t *testing.T) {
 			source = storagemocks.NewMockMetricsLister(t)
 			target = storagemocks.NewMockMetricsSaver(t)
-			var output bytes.Buffer
+			var output lockedBuffer
 			logger := zerolog.New(&output).Level(zerolog.InfoLevel)
 			saver = storage.NewPeriodicSaver(5*time.Millisecond, source, target, logger)
 

@@ -90,6 +90,63 @@ func TestPostgresMetricsRepository(t *testing.T) {
 		})
 	})
 
+	t.Run("Тест метода SaveBatch", func(t *testing.T) {
+		t.Run("Должен сохранить batch одним запросом", func(t *testing.T) {
+			setup(t)
+
+			value := 12.5
+			delta := int64(3)
+			mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics (id, type, delta, value)")).
+				WithArgs("Alloc", model.Gauge, nil, value, "PollCount", model.Counter, delta, nil).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+
+			err := repo.SaveBatch([]model.Metrics{
+				{ID: "Alloc", MType: model.Gauge, Value: &value},
+				{ID: "PollCount", MType: model.Counter, Delta: &delta},
+			})
+
+			require.NoError(t, err)
+		})
+
+		t.Run("Должен схлопнуть повторяющиеся метрики перед сохранением", func(t *testing.T) {
+			setup(t)
+
+			firstValue := 12.5
+			lastValue := 99.9
+			firstDelta := int64(3)
+			secondDelta := int64(4)
+			mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics (id, type, delta, value)")).
+				WithArgs("Alloc", model.Gauge, nil, lastValue, "PollCount", model.Counter, int64(7), nil).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+
+			err := repo.SaveBatch([]model.Metrics{
+				{ID: "Alloc", MType: model.Gauge, Value: &firstValue},
+				{ID: "PollCount", MType: model.Counter, Delta: &firstDelta},
+				{ID: "Alloc", MType: model.Gauge, Value: &lastValue},
+				{ID: "PollCount", MType: model.Counter, Delta: &secondDelta},
+			})
+
+			require.NoError(t, err)
+		})
+
+		t.Run("Должен вернуть ошибку если запрос не выполнен", func(t *testing.T) {
+			setup(t)
+
+			value := 12.5
+			saveErr := errors.New("insert failed")
+			mock.ExpectExec(regexp.QuoteMeta("INSERT INTO metrics (id, type, delta, value)")).
+				WithArgs("Alloc", model.Gauge, nil, value).
+				WillReturnError(saveErr)
+
+			err := repo.SaveBatch([]model.Metrics{
+				{ID: "Alloc", MType: model.Gauge, Value: &value},
+			})
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, saveErr)
+		})
+	})
+
 	t.Run("Тест метода Load", func(t *testing.T) {
 		t.Run("Должен загрузить gauge", func(t *testing.T) {
 			setup(t)
