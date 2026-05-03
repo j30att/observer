@@ -5,127 +5,123 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/model"
 	"j30att/observer/internal/server/storage"
+	storagemocks "j30att/observer/internal/server/storage/mocks"
 )
 
-func TestPeriodicSaverSaveWritesCurrentMetrics(t *testing.T) {
-	value := 12.5
-	source := &fakeMetricsLister{
-		metrics: []model.Metrics{
-			{ID: "Alloc", MType: model.Gauge, Value: &value},
-		},
-	}
-	target := &fakeMetricsSaver{}
-	saver := storage.NewPeriodicSaver(time.Second, source, target, zerolog.Nop())
+func TestPeriodicSaver(t *testing.T) {
+	var (
+		saver  *storage.PeriodicSaver
+		source *storagemocks.MockMetricsLister
+		target *storagemocks.MockMetricsSaver
+	)
 
-	require.NoError(t, saver.Save())
+	setup := func(t *testing.T, interval time.Duration) {
+		t.Helper()
 
-	require.Equal(t, [][]model.Metrics{
-		source.metrics,
-	}, target.savedSnapshots())
-}
-
-func TestPeriodicSaverRunSavesMetricsPeriodically(t *testing.T) {
-	value := 12.5
-	source := &fakeMetricsLister{
-		metrics: []model.Metrics{
-			{ID: "Alloc", MType: model.Gauge, Value: &value},
-		},
-	}
-	target := &fakeMetricsSaver{}
-	saver := storage.NewPeriodicSaver(5*time.Millisecond, source, target, zerolog.Nop())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go saver.Run(ctx)
-
-	require.Eventually(t, func() bool {
-		return len(target.savedSnapshots()) > 0
-	}, time.Second, 10*time.Millisecond)
-}
-
-func TestPeriodicSaverRunStopsWhenContextIsCanceled(t *testing.T) {
-	source := &fakeMetricsLister{}
-	target := &fakeMetricsSaver{}
-	saver := storage.NewPeriodicSaver(5*time.Millisecond, source, target, zerolog.Nop())
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	saver.Run(ctx)
-
-	require.Empty(t, target.savedSnapshots())
-}
-
-func TestPeriodicSaverRunDoesNothingWhenIntervalIsNotPositive(t *testing.T) {
-	source := &fakeMetricsLister{}
-	target := &fakeMetricsSaver{}
-	saver := storage.NewPeriodicSaver(0, source, target, zerolog.Nop())
-
-	saver.Run(context.Background())
-
-	require.Empty(t, target.savedSnapshots())
-}
-
-func TestPeriodicSaverRunLogsErrorWhenSaveFails(t *testing.T) {
-	saveErr := errors.New("save failed")
-	source := &fakeMetricsLister{}
-	target := &fakeMetricsSaver{err: saveErr}
-	var output bytes.Buffer
-	logger := zerolog.New(&output).Level(zerolog.InfoLevel)
-	saver := storage.NewPeriodicSaver(5*time.Millisecond, source, target, logger)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go saver.Run(ctx)
-
-	require.Eventually(t, func() bool {
-		return output.Len() > 0
-	}, time.Second, 10*time.Millisecond)
-
-	var entry map[string]any
-	require.NoError(t, json.NewDecoder(&output).Decode(&entry))
-	require.Equal(t, "error", entry["level"])
-	require.Equal(t, "failed to save metrics", entry["message"])
-	require.Equal(t, saveErr.Error(), entry["error"])
-}
-
-type fakeMetricsLister struct {
-	metrics []model.Metrics
-}
-
-func (l *fakeMetricsLister) List() []model.Metrics {
-	return l.metrics
-}
-
-type fakeMetricsSaver struct {
-	mu        sync.Mutex
-	snapshots [][]model.Metrics
-	err       error
-}
-
-func (s *fakeMetricsSaver) Save(metrics []model.Metrics) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.err != nil {
-		return s.err
+		source = storagemocks.NewMockMetricsLister(t)
+		target = storagemocks.NewMockMetricsSaver(t)
+		saver = storage.NewPeriodicSaver(interval, source, target, zerolog.Nop())
 	}
 
-	s.snapshots = append(s.snapshots, metrics)
-	return nil
-}
+	t.Run("Тест метода Save", func(t *testing.T) {
+		t.Run("Должен сохранить текущие метрики", func(t *testing.T) {
+			setup(t, time.Second)
 
-func (s *fakeMetricsSaver) savedSnapshots() [][]model.Metrics {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+			value := 12.5
+			metrics := []model.Metrics{{ID: "Alloc", MType: model.Gauge, Value: &value}}
+			source.EXPECT().List().Return(metrics)
+			target.EXPECT().Save(metrics).Return(nil)
 
-	return append([][]model.Metrics(nil), s.snapshots...)
+			err := saver.Save()
+
+			require.NoError(t, err)
+		})
+	})
+
+	t.Run("Тест метода Run", func(t *testing.T) {
+		t.Run("Должен периодически сохранять метрики", func(t *testing.T) {
+			setup(t, 5*time.Millisecond)
+
+			saved := make(chan struct{}, 1)
+			value := 12.5
+			metrics := []model.Metrics{{ID: "Alloc", MType: model.Gauge, Value: &value}}
+			source.EXPECT().List().Return(metrics).Maybe()
+			target.EXPECT().Save(metrics).Run(func([]model.Metrics) {
+				select {
+				case saved <- struct{}{}:
+				default:
+				}
+			}).Return(nil).Maybe()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go saver.Run(ctx)
+
+			require.Eventually(t, func() bool {
+				select {
+				case <-saved:
+					return true
+				default:
+					return false
+				}
+			}, time.Second, 10*time.Millisecond)
+		})
+
+		t.Run("Должен остановиться если контекст отменён", func(t *testing.T) {
+			setup(t, 5*time.Millisecond)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			saver.Run(ctx)
+
+			source.AssertNotCalled(t, "List")
+			target.AssertNotCalled(t, "Save", mock.Anything)
+		})
+
+		t.Run("Должен ничего не делать если interval не положительный", func(t *testing.T) {
+			setup(t, 0)
+
+			saver.Run(context.Background())
+
+			source.AssertNotCalled(t, "List")
+			target.AssertNotCalled(t, "Save", mock.Anything)
+		})
+
+		t.Run("Должен залогировать ошибку сохранения", func(t *testing.T) {
+			source = storagemocks.NewMockMetricsLister(t)
+			target = storagemocks.NewMockMetricsSaver(t)
+			var output bytes.Buffer
+			logger := zerolog.New(&output).Level(zerolog.InfoLevel)
+			saver = storage.NewPeriodicSaver(5*time.Millisecond, source, target, logger)
+
+			saveErr := errors.New("save failed")
+			metrics := []model.Metrics{}
+			source.EXPECT().List().Return(metrics).Maybe()
+			target.EXPECT().Save(metrics).Return(saveErr).Maybe()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go saver.Run(ctx)
+
+			require.Eventually(t, func() bool {
+				return output.Len() > 0
+			}, time.Second, 10*time.Millisecond)
+
+			var entry map[string]any
+			require.NoError(t, json.NewDecoder(&output).Decode(&entry))
+			assert.Equal(t, "error", entry["level"])
+			assert.Equal(t, "failed to save metrics", entry["message"])
+			assert.Equal(t, saveErr.Error(), entry["error"])
+		})
+	})
 }

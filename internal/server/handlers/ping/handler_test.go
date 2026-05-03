@@ -7,47 +7,59 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"j30att/observer/internal/server/handlers/ping"
+	pingmocks "j30att/observer/internal/server/handlers/ping/mocks"
 )
 
-type fakePinger struct {
-	err error
-}
+func TestPingHandler(t *testing.T) {
+	var (
+		handler *ping.Handler
+		pinger  *pingmocks.MockPinger
+	)
 
-func (p fakePinger) PingContext(context.Context) error {
-	return p.err
-}
+	setup := func(t *testing.T) {
+		t.Helper()
 
-func TestPingReturnsOKWhenDatabaseIsAvailable(t *testing.T) {
-	handler := ping.New(fakePinger{})
+		pinger = pingmocks.NewMockPinger(t)
+		handler = &[]ping.Handler{ping.New(pinger)}[0]
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	rec := httptest.NewRecorder()
+	t.Run("Тест метода Ping", func(t *testing.T) {
+		t.Run("Должен вернуть OK если база доступна", func(t *testing.T) {
+			setup(t)
 
-	handler.Ping(rec, req)
+			pinger.EXPECT().PingContext(mock.AnythingOfType("*context.timerCtx")).Return(nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", nil)
+			res := httptest.NewRecorder()
 
-	require.Equal(t, http.StatusOK, rec.Code)
-}
+			handler.Ping(res, req)
 
-func TestPingReturnsInternalServerErrorWhenDatabaseIsUnavailable(t *testing.T) {
-	handler := ping.New(fakePinger{err: errors.New("database is unavailable")})
+			assert.Equal(t, http.StatusOK, res.Code)
+		})
 
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	rec := httptest.NewRecorder()
+		t.Run("Должен вернуть internal server error если база недоступна", func(t *testing.T) {
+			setup(t)
 
-	handler.Ping(rec, req)
+			pinger.EXPECT().PingContext(mock.AnythingOfType("*context.timerCtx")).
+				Return(errors.New("database is unavailable"))
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", nil)
+			res := httptest.NewRecorder()
 
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
-}
+			handler.Ping(res, req)
 
-func TestPingReturnsInternalServerErrorWithoutDatabase(t *testing.T) {
-	handler := ping.New(nil)
+			assert.Equal(t, http.StatusInternalServerError, res.Code)
+		})
 
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
-	rec := httptest.NewRecorder()
+		t.Run("Должен вернуть internal server error если база не задана", func(t *testing.T) {
+			handler := ping.New(nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", nil)
+			res := httptest.NewRecorder()
 
-	handler.Ping(rec, req)
+			handler.Ping(res, req)
 
-	require.Equal(t, http.StatusInternalServerError, rec.Code)
+			assert.Equal(t, http.StatusInternalServerError, res.Code)
+		})
+	})
 }

@@ -8,57 +8,69 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/middlewares"
 )
 
-func TestLoggerWritesRequestAndResponseFields(t *testing.T) {
-	var output bytes.Buffer
+func TestLoggerMiddleware(t *testing.T) {
+	var (
+		output  bytes.Buffer
+		handler http.Handler
+	)
 
-	logger := zerolog.New(&output).Level(zerolog.InfoLevel)
-	handler := middlewares.Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-		_, err := w.Write([]byte("hello"))
-		require.NoError(t, err)
-	}))
+	setup := func(t *testing.T, next http.HandlerFunc) {
+		t.Helper()
 
-	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
-	rec := httptest.NewRecorder()
+		output.Reset()
+		logger := zerolog.New(&output).Level(zerolog.InfoLevel)
+		handler = middlewares.Logger(logger)(next)
+	}
 
-	handler.ServeHTTP(rec, req)
+	t.Run("Тест middleware Logger", func(t *testing.T) {
+		t.Run("Должен записать поля request и response", func(t *testing.T) {
+			setup(t, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusCreated)
+				_, err := w.Write([]byte("hello"))
+				require.NoError(t, err)
+			})
 
-	require.Equal(t, http.StatusCreated, rec.Code)
-	require.Equal(t, "hello", rec.Body.String())
+			req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
+			rec := httptest.NewRecorder()
 
-	var entry map[string]any
-	require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
-	require.Equal(t, "info", entry["level"])
-	require.Equal(t, "handled request", entry["message"])
-	require.Equal(t, http.MethodGet, entry["method"])
-	require.Equal(t, "/value/gauge/Alloc", entry["uri"])
-	require.EqualValues(t, http.StatusCreated, entry["status"])
-	require.EqualValues(t, len("hello"), entry["response_size"])
-	require.Contains(t, entry, "duration")
-}
+			handler.ServeHTTP(rec, req)
 
-func TestLoggerWritesOKStatusWhenHandlerDoesNotSetStatusExplicitly(t *testing.T) {
-	var output bytes.Buffer
+			assert.Equal(t, http.StatusCreated, rec.Code)
+			assert.Equal(t, "hello", rec.Body.String())
 
-	logger := zerolog.New(&output).Level(zerolog.InfoLevel)
-	handler := middlewares.Logger(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write([]byte("hello"))
-		require.NoError(t, err)
-	}))
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+			assert.Equal(t, "info", entry["level"])
+			assert.Equal(t, "handled request", entry["message"])
+			assert.Equal(t, http.MethodGet, entry["method"])
+			assert.Equal(t, "/value/gauge/Alloc", entry["uri"])
+			assert.EqualValues(t, http.StatusCreated, entry["status"])
+			assert.EqualValues(t, len("hello"), entry["response_size"])
+			assert.Contains(t, entry, "duration")
+		})
 
-	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
-	rec := httptest.NewRecorder()
+		t.Run("Должен записать OK если handler не вызвал WriteHeader явно", func(t *testing.T) {
+			setup(t, func(w http.ResponseWriter, _ *http.Request) {
+				_, err := w.Write([]byte("hello"))
+				require.NoError(t, err)
+			})
 
-	handler.ServeHTTP(rec, req)
+			req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
+			rec := httptest.NewRecorder()
 
-	require.Equal(t, http.StatusOK, rec.Code)
+			handler.ServeHTTP(rec, req)
 
-	var entry map[string]any
-	require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
-	require.EqualValues(t, http.StatusOK, entry["status"])
-	require.EqualValues(t, len("hello"), entry["response_size"])
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(output.Bytes(), &entry))
+			assert.EqualValues(t, http.StatusOK, entry["status"])
+			assert.EqualValues(t, len("hello"), entry["response_size"])
+		})
+	})
 }

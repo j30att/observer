@@ -1,58 +1,79 @@
 package update_test
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/handlers/update"
 	"j30att/observer/internal/server/model"
-	"j30att/observer/internal/server/repository"
+	repositorymocks "j30att/observer/internal/server/repository/mocks"
 )
 
-func TestExecuteSavesGauge(t *testing.T) {
-	repo := repository.NewMetricsRepository()
-	command := update.New(repo)
+func TestUpdateMetricHandler(t *testing.T) {
+	var (
+		handler *update.Handler
+		repo    *repositorymocks.MockMetricsRepository
+	)
 
-	err := command.Execute(model.Gauge, "Alloc", "12.5")
-	require.NoError(t, err)
+	setup := func(t *testing.T) {
+		t.Helper()
 
-	metric, err := repo.Load(model.Gauge, "Alloc")
-	require.NoError(t, err)
+		repo = repositorymocks.NewMockMetricsRepository(t)
+		handler = update.New(repo)
+	}
 
-	require.NotNil(t, metric.Value)
-	require.Equal(t, 12.5, *metric.Value)
-}
+	t.Run("Тест метода Execute", func(t *testing.T) {
+		t.Run("Должен сохранить gauge", func(t *testing.T) {
+			setup(t)
 
-func TestExecuteAccumulatesCounter(t *testing.T) {
-	repo := repository.NewMetricsRepository()
-	command := update.New(repo)
+			repo.EXPECT().SaveGauge("Alloc", 12.5).Return(nil)
 
-	err := command.Execute(model.Counter, "PollCount", "2")
-	require.NoError(t, err)
+			err := handler.Execute(model.Gauge, "Alloc", "12.5")
 
-	err = command.Execute(model.Counter, "PollCount", "3")
-	require.NoError(t, err)
+			require.NoError(t, err)
+		})
 
-	metric, err := repo.Load(model.Counter, "PollCount")
-	require.NoError(t, err)
+		t.Run("Должен сохранить counter", func(t *testing.T) {
+			setup(t)
 
-	require.NotNil(t, metric.Delta)
-	require.EqualValues(t, 5, *metric.Delta)
-}
+			repo.EXPECT().SaveCounter("PollCount", int64(2)).Return(nil)
 
-func TestExecuteReturnsErrorForUnsupportedMetricType(t *testing.T) {
-	repo := repository.NewMetricsRepository()
-	command := update.New(repo)
+			err := handler.Execute(model.Counter, "PollCount", "2")
 
-	err := command.Execute("summary", "Alloc", "12.5")
-	require.Error(t, err)
-	require.ErrorIs(t, err, update.ErrUnsupportedMetricType)
-}
+			require.NoError(t, err)
+		})
 
-func TestExecuteReturnsErrorForInvalidCounterValue(t *testing.T) {
-	repo := repository.NewMetricsRepository()
-	command := update.New(repo)
+		t.Run("Должен вернуть ошибку если тип метрики не поддерживается", func(t *testing.T) {
+			setup(t)
 
-	err := command.Execute(model.Counter, "PollCount", "abc")
-	require.Error(t, err)
+			err := handler.Execute("summary", "Alloc", "12.5")
+
+			require.ErrorIs(t, err, update.ErrUnsupportedMetricType)
+			repo.AssertNotCalled(t, "SaveGauge", mock.Anything, mock.Anything)
+			repo.AssertNotCalled(t, "SaveCounter", mock.Anything, mock.Anything)
+		})
+
+		t.Run("Должен вернуть ошибку если counter не число", func(t *testing.T) {
+			setup(t)
+
+			err := handler.Execute(model.Counter, "PollCount", "abc")
+
+			require.Error(t, err)
+			repo.AssertNotCalled(t, "SaveCounter", mock.Anything, mock.Anything)
+		})
+
+		t.Run("Должен вернуть ошибку репозитория", func(t *testing.T) {
+			setup(t)
+
+			saveErr := errors.New("save failed")
+			repo.EXPECT().SaveGauge("Alloc", 12.5).Return(saveErr)
+
+			err := handler.Execute(model.Gauge, "Alloc", "12.5")
+
+			assert.ErrorIs(t, err, saveErr)
+		})
+	})
 }

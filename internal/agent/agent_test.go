@@ -2,118 +2,91 @@ package agent_test
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/agent"
+	agentmocks "j30att/observer/internal/agent/mocks"
 	agentmodel "j30att/observer/internal/agent/model"
 	"j30att/observer/internal/agent/repository"
 	"j30att/observer/internal/config"
 )
 
-type stubCollector struct {
-	mu    sync.Mutex
-	calls int
-}
+func TestAgent(t *testing.T) {
+	var (
+		app       *agent.Agent
+		store     *repository.MetricsRepository
+		collector *agentmocks.MockCollector
+		sender    *agentmocks.MockSender
+	)
 
-func (c *stubCollector) Collect(store *repository.MetricsRepository) error {
-	c.mu.Lock()
-	c.calls++
-	c.mu.Unlock()
+	setup := func(t *testing.T, cfg config.AgentConfig) {
+		t.Helper()
 
-	store.SaveGauge("Alloc", 12.5)
-	store.SaveCounter(agentmodel.PollCountMetric, 1)
-
-	return nil
-}
-
-func (c *stubCollector) CallCount() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.calls
-}
-
-type stubSender struct {
-	mu        sync.Mutex
-	calls     int
-	snapshots []agentmodel.MetricsSnapshot
-}
-
-func (s *stubSender) Send(_ context.Context, snapshot agentmodel.MetricsSnapshot) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.calls++
-	s.snapshots = append(s.snapshots, snapshot)
-
-	return nil
-}
-
-func (s *stubSender) CallCount() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.calls
-}
-
-func (s *stubSender) LastSnapshot() agentmodel.MetricsSnapshot {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.snapshots[len(s.snapshots)-1]
-}
-
-func TestAgentPollCollectsMetricsIntoRepository(t *testing.T) {
-	cfg := config.AgentConfig{}
-	repo := repository.NewMetricsRepository()
-	collector := &stubCollector{}
-	sender := &stubSender{}
-	app := agent.New(cfg, repo, collector, sender)
-
-	err := app.Poll()
-	require.NoError(t, err)
-
-	snapshot := repo.Snapshot()
-	require.Equal(t, 12.5, snapshot.Gauges["Alloc"])
-	require.EqualValues(t, 1, snapshot.Counters[agentmodel.PollCountMetric])
-	require.Equal(t, 1, collector.CallCount())
-}
-
-func TestAgentReportSendsRepositorySnapshot(t *testing.T) {
-	cfg := config.AgentConfig{}
-	repo := repository.NewMetricsRepository()
-	repo.SaveGauge("Alloc", 12.5)
-	repo.SaveCounter(agentmodel.PollCountMetric, 2)
-
-	collector := &stubCollector{}
-	sender := &stubSender{}
-	app := agent.New(cfg, repo, collector, sender)
-
-	err := app.Report(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, 1, sender.CallCount())
-	require.Equal(t, 12.5, sender.LastSnapshot().Gauges["Alloc"])
-	require.EqualValues(t, 2, sender.LastSnapshot().Counters[agentmodel.PollCountMetric])
-}
-
-func TestAgentRunPollsAndReportsUntilContextCancelled(t *testing.T) {
-	cfg := config.AgentConfig{
-		PollInterval:   10 * time.Millisecond,
-		ReportInterval: 15 * time.Millisecond,
+		store = repository.NewMetricsRepository()
+		collector = agentmocks.NewMockCollector(t)
+		sender = agentmocks.NewMockSender(t)
+		app = agent.New(cfg, store, collector, sender)
 	}
-	repo := repository.NewMetricsRepository()
-	collector := &stubCollector{}
-	sender := &stubSender{}
-	app := agent.New(cfg, repo, collector, sender)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
-	defer cancel()
+	t.Run("Тест метода Poll", func(t *testing.T) {
+		t.Run("Должен собрать метрики в repository", func(t *testing.T) {
+			setup(t, config.AgentConfig{})
 
-	err := app.Run(ctx)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.GreaterOrEqual(t, collector.CallCount(), 1)
-	require.GreaterOrEqual(t, sender.CallCount(), 1)
+			collector.EXPECT().Collect(store).Run(func(store *repository.MetricsRepository) {
+				store.SaveGauge("Alloc", 12.5)
+				store.SaveCounter(agentmodel.PollCountMetric, 1)
+			}).Return(nil)
+
+			err := app.Poll()
+
+			require.NoError(t, err)
+			snapshot := store.Snapshot()
+			assert.Equal(t, 12.5, snapshot.Gauges["Alloc"])
+			assert.EqualValues(t, 1, snapshot.Counters[agentmodel.PollCountMetric])
+		})
+	})
+
+	t.Run("Тест метода Report", func(t *testing.T) {
+		t.Run("Должен отправить snapshot repository", func(t *testing.T) {
+			setup(t, config.AgentConfig{})
+
+			store.SaveGauge("Alloc", 12.5)
+			store.SaveCounter(agentmodel.PollCountMetric, 2)
+			sender.EXPECT().Send(mock.Anything, mock.MatchedBy(func(snapshot agentmodel.MetricsSnapshot) bool {
+				return snapshot.Gauges["Alloc"] == 12.5 &&
+					snapshot.Counters[agentmodel.PollCountMetric] == 2
+			})).Return(nil)
+
+			err := app.Report(context.Background())
+
+			require.NoError(t, err)
+		})
+	})
+
+	t.Run("Тест метода Run", func(t *testing.T) {
+		t.Run("Должен собирать и отправлять метрики пока контекст не отменён", func(t *testing.T) {
+			setup(t, config.AgentConfig{
+				PollInterval:   10 * time.Millisecond,
+				ReportInterval: 15 * time.Millisecond,
+			})
+
+			collector.EXPECT().Collect(store).Return(nil).Maybe()
+			sender.EXPECT().Send(mock.Anything, mock.MatchedBy(func(agentmodel.MetricsSnapshot) bool {
+				return true
+			})).Return(nil).Maybe()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+			defer cancel()
+
+			err := app.Run(ctx)
+
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			assert.GreaterOrEqual(t, len(collector.Calls), 1)
+			assert.GreaterOrEqual(t, len(sender.Calls), 1)
+		})
+	})
 }

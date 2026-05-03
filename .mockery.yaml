@@ -1,0 +1,6 @@
+with-expecter: true
+all: true
+recursive: true
+dir: "{{.InterfaceDir}}/mocks"
+mockname: "Mock{{.InterfaceName}}"
+outpkg: mocks

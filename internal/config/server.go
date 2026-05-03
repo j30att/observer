@@ -21,7 +21,7 @@ func NewServerConfig() ServerConfig {
 	return ServerConfig{
 		Address:         "localhost:8080",
 		StoreInterval:   300 * time.Second,
-		FileStoragePath: "/tmp/metrics-db.json",
+		FileStoragePath: "",
 		Restore:         true,
 	}
 }

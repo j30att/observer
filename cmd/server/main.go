@@ -20,6 +20,7 @@ import (
 	"j30att/observer/internal/server/repository"
 	"j30att/observer/internal/server/router"
 	"j30att/observer/internal/server/storage"
+	"j30att/observer/migrations"
 )
 
 func main() {
@@ -41,32 +42,43 @@ func main() {
 			logger.Fatal().Err(err).Msg("failed to open database")
 		}
 		defer db.Close()
+
+		if err := migrations.Up(db); err != nil {
+			logger.Fatal().Err(err).Msg("failed to apply database migrations")
+		}
 	}
 
-	repo := repository.NewMetricsRepository()
-	var fileStorage *storage.FileStorage
-	if cfg.Restore {
-		var metrics []model.Metrics
-		fileStorage, metrics, err = storage.NewRestoredFileStorage(cfg.FileStoragePath, logger)
-		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to restore metrics from file")
+	var metricsRepo repository.MetricsRepository
+	if db != nil {
+		metricsRepo = repository.NewPostgresMetricsRepository(db)
+	} else if cfg.FileStoragePath != "" {
+		repo := repository.NewMetricsRepository()
+		var fileStorage *storage.FileStorage
+		if cfg.Restore {
+			var metrics []model.Metrics
+			fileStorage, metrics, err = storage.NewRestoredFileStorage(cfg.FileStoragePath, logger)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("failed to restore metrics from file")
+			}
+
+			if err := repo.Restore(metrics); err != nil {
+				logger.Fatal().Err(err).Msg("failed to restore metrics repository")
+			}
+
+			logger.Info().Int("metrics_count", len(metrics)).Msg("restored metrics")
+		} else {
+			fileStorage = storage.NewFileStorage(cfg.FileStoragePath, logger)
 		}
 
-		if err := repo.Restore(metrics); err != nil {
-			logger.Fatal().Err(err).Msg("failed to restore metrics repository")
+		metricsRepo = repo
+		if cfg.StoreInterval > 0 {
+			periodicSaver := storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, logger)
+			go periodicSaver.Run(context.Background())
+		} else {
+			metricsRepo = repository.NewSyncPersistentRepository(repo, fileStorage)
 		}
-
-		logger.Info().Int("metrics_count", len(metrics)).Msg("restored metrics")
 	} else {
-		fileStorage = storage.NewFileStorage(cfg.FileStoragePath, logger)
-	}
-
-	var metricsRepo repository.MetricsRepository = repo
-	if cfg.StoreInterval > 0 {
-		periodicSaver := storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, logger)
-		go periodicSaver.Run(context.Background())
-	} else {
-		metricsRepo = repository.NewSyncPersistentRepository(repo, fileStorage)
+		metricsRepo = repository.NewMetricsRepository()
 	}
 
 	updateMetricCommand := update.New(metricsRepo)
