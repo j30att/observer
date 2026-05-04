@@ -3,34 +3,46 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgerrcode"
+	"j30att/observer/internal/retry"
 	"j30att/observer/internal/server/model"
 )
 
 type PostgresMetricsRepository struct {
-	db *sql.DB
+	db          *sql.DB
+	retryDelays []time.Duration
 }
 
 func NewPostgresMetricsRepository(db *sql.DB) *PostgresMetricsRepository {
-	return &PostgresMetricsRepository{db: db}
+	return &PostgresMetricsRepository{
+		db:          db,
+		retryDelays: retry.DefaultDelays,
+	}
 }
 
 func (r *PostgresMetricsRepository) SaveGauge(name string, value float64) error {
-	_, err := r.db.ExecContext(
-		context.Background(),
-		`
-			INSERT INTO metrics (id, type, value, delta)
-			VALUES ($1, $2, $3, NULL)
-			ON CONFLICT (id, type)
-			DO UPDATE SET value = EXCLUDED.value, delta = NULL
-		`,
-		name,
-		model.Gauge,
-		value,
-	)
+	ctx := context.Background()
+	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
+		_, execErr := r.db.ExecContext(
+			ctx,
+			`
+				INSERT INTO metrics (id, type, value, delta)
+				VALUES ($1, $2, $3, NULL)
+				ON CONFLICT (id, type)
+				DO UPDATE SET value = EXCLUDED.value, delta = NULL
+			`,
+			name,
+			model.Gauge,
+			value,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("save gauge: %w", err)
 	}
@@ -39,18 +51,22 @@ func (r *PostgresMetricsRepository) SaveGauge(name string, value float64) error 
 }
 
 func (r *PostgresMetricsRepository) SaveCounter(name string, delta int64) error {
-	_, err := r.db.ExecContext(
-		context.Background(),
-		`
-			INSERT INTO metrics (id, type, delta, value)
-			VALUES ($1, $2, $3, NULL)
-			ON CONFLICT (id, type)
-			DO UPDATE SET delta = metrics.delta + EXCLUDED.delta, value = NULL
-		`,
-		name,
-		model.Counter,
-		delta,
-	)
+	ctx := context.Background()
+	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
+		_, execErr := r.db.ExecContext(
+			ctx,
+			`
+				INSERT INTO metrics (id, type, delta, value)
+				VALUES ($1, $2, $3, NULL)
+				ON CONFLICT (id, type)
+				DO UPDATE SET delta = metrics.delta + EXCLUDED.delta, value = NULL
+			`,
+			name,
+			model.Counter,
+			delta,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("save counter: %w", err)
 	}
@@ -79,24 +95,28 @@ func (r *PostgresMetricsRepository) SaveBatch(metrics []model.Metrics) error {
 		}
 	}
 
-	_, err = r.db.ExecContext(
-		context.Background(),
-		`
-			INSERT INTO metrics (id, type, delta, value)
-			VALUES `+strings.Join(values, ",")+`
-			ON CONFLICT (id, type)
-			DO UPDATE SET
-				delta = CASE
-					WHEN EXCLUDED.type = 'counter' THEN metrics.delta + EXCLUDED.delta
-					ELSE NULL
-				END,
-				value = CASE
-					WHEN EXCLUDED.type = 'gauge' THEN EXCLUDED.value
-					ELSE NULL
-				END
-		`,
-		args...,
-	)
+	ctx := context.Background()
+	err = retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
+		_, execErr := r.db.ExecContext(
+			ctx,
+			`
+				INSERT INTO metrics (id, type, delta, value)
+				VALUES `+strings.Join(values, ",")+`
+				ON CONFLICT (id, type)
+				DO UPDATE SET
+					delta = CASE
+						WHEN EXCLUDED.type = 'counter' THEN metrics.delta + EXCLUDED.delta
+						ELSE NULL
+					END,
+					value = CASE
+						WHEN EXCLUDED.type = 'gauge' THEN EXCLUDED.value
+						ELSE NULL
+					END
+			`,
+			args...,
+		)
+		return execErr
+	})
 	if err != nil {
 		return fmt.Errorf("save batch metrics: %w", err)
 	}
@@ -157,16 +177,19 @@ func (r *PostgresMetricsRepository) Load(metricType, name string) (model.Metrics
 	var delta sql.NullInt64
 	var value sql.NullFloat64
 
-	err := r.db.QueryRowContext(
-		context.Background(),
-		`
-			SELECT id, type, delta, value
-			FROM metrics
-			WHERE id = $1 AND type = $2
-		`,
-		name,
-		metricType,
-	).Scan(&metric.ID, &metric.MType, &delta, &value)
+	ctx := context.Background()
+	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
+		return r.db.QueryRowContext(
+			ctx,
+			`
+				SELECT id, type, delta, value
+				FROM metrics
+				WHERE id = $1 AND type = $2
+			`,
+			name,
+			metricType,
+		).Scan(&metric.ID, &metric.MType, &delta, &value)
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.Metrics{}, ErrMetricNotFound
 	}
@@ -185,14 +208,20 @@ func (r *PostgresMetricsRepository) Load(metricType, name string) (model.Metrics
 }
 
 func (r *PostgresMetricsRepository) List() []model.Metrics {
-	rows, err := r.db.QueryContext(
-		context.Background(),
-		`
-			SELECT id, type, delta, value
-			FROM metrics
-			ORDER BY id
-		`,
-	)
+	var rows *sql.Rows
+	ctx := context.Background()
+	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
+		var queryErr error
+		rows, queryErr = r.db.QueryContext(
+			ctx,
+			`
+				SELECT id, type, delta, value
+				FROM metrics
+				ORDER BY id
+			`,
+		)
+		return queryErr
+	})
 	if err != nil {
 		return nil
 	}
@@ -222,4 +251,21 @@ func (r *PostgresMetricsRepository) List() []model.Metrics {
 	}
 
 	return metrics
+}
+
+type sqlStateError interface {
+	SQLState() string
+}
+
+func isRetriablePostgresError(err error) bool {
+	if errors.Is(err, driver.ErrBadConn) {
+		return true
+	}
+
+	var sqlStateErr sqlStateError
+	if !errors.As(err, &sqlStateErr) {
+		return false
+	}
+
+	return pgerrcode.IsConnectionException(sqlStateErr.SQLState())
 }

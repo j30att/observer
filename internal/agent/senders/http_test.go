@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,6 +110,33 @@ func TestHTTPSender(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, "/updates", requestedPath)
+		})
+
+		t.Run("Должен повторить отправку если соединение временно недоступно", func(t *testing.T) {
+			requestsCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requestsCount++
+				if requestsCount == 1 {
+					conn, _, err := w.(http.Hijacker).Hijack()
+					require.NoError(t, err)
+					_ = conn.Close()
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			sender := NewHTTPSender(server.URL)
+			sender.retryDelays = []time.Duration{0, 0, 0}
+			snapshot := agentmodel.NewMetricsSnapshot()
+			snapshot.Gauges["Alloc"] = 12.5
+
+			err := sender.Send(context.Background(), snapshot)
+
+			require.NoError(t, err)
+			assert.Equal(t, 2, requestsCount)
 		})
 
 		t.Run("Не должен отправлять пустой batch", func(t *testing.T) {

@@ -4,24 +4,30 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	agentmodel "j30att/observer/internal/agent/model"
 	"j30att/observer/internal/compression"
+	"j30att/observer/internal/retry"
 )
 
 type HTTPSender struct {
-	baseURL *url.URL
-	client  *http.Client
+	baseURL     *url.URL
+	client      *http.Client
+	retryDelays []time.Duration
 }
 
 func NewHTTPSender(address string) *HTTPSender {
 	return &HTTPSender{
-		baseURL: parseBaseURL(address),
-		client:  &http.Client{},
+		baseURL:     parseBaseURL(address),
+		client:      &http.Client{},
+		retryDelays: retry.DefaultDelays,
 	}
 }
 
@@ -85,11 +91,16 @@ func (s *HTTPSender) sendMetrics(ctx context.Context, metrics []agentmodel.Metri
 	metricURL := *s.baseURL
 	metricURL.Path = strings.TrimRight(metricURL.Path, "/") + "/updates"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricURL.String(), bytes.NewReader(body))
+	return retry.Do(ctx, s.retryDelays, isRetriableTransportError, func() error {
+		return s.doSendMetrics(ctx, metricURL.String(), body)
+	})
+}
+
+func (s *HTTPSender) doSendMetrics(ctx context.Context, metricURL string, body []byte) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create metrics update request: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", compression.GzipEncoding)
 	req.Header.Set("Accept-Encoding", compression.GzipEncoding)
@@ -111,4 +122,18 @@ func (s *HTTPSender) sendMetrics(ctx context.Context, metrics []agentmodel.Metri
 	}
 
 	return nil
+}
+
+func isRetriableTransportError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
+
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
