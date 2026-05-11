@@ -20,7 +20,7 @@ func New(db Pinger) *Handler {
 
 func (h Handler) Ping(w http.ResponseWriter, r *http.Request) {
 	if h.db == nil {
-		w.WriteHeader(http.StatusOK)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
