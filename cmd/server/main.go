@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
 	"j30att/observer/internal/config"
@@ -24,10 +23,6 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		stdlog.Fatal(err)
-	}
-
 	cfg, err := config.ParseServerConfig(os.Args[1:])
 	if err != nil {
 		stdlog.Fatal(err)
