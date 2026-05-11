@@ -3,6 +3,8 @@
 package mocks
 
 import (
+	context "context"
+
 	model "j30att/observer/internal/server/model"
 
 	mock "github.com/stretchr/testify/mock"
@@ -21,17 +23,17 @@ func (_m *MockMetricsRepository) EXPECT() *MockMetricsRepository_Expecter {
 	return &MockMetricsRepository_Expecter{mock: &_m.Mock}
 }
 
-// SaveBatch provides a mock function with given fields: metrics
-func (_m *MockMetricsRepository) SaveBatch(metrics []model.Metrics) error {
-	ret := _m.Called(metrics)
+// SaveBatch provides a mock function with given fields: ctx, metrics
+func (_m *MockMetricsRepository) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
+	ret := _m.Called(ctx, metrics)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SaveBatch")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]model.Metrics) error); ok {
-		r0 = rf(metrics)
+	if rf, ok := ret.Get(0).(func(context.Context, []model.Metrics) error); ok {
+		r0 = rf(ctx, metrics)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -45,14 +47,15 @@ type MockMetricsRepository_SaveBatch_Call struct {
 }
 
 // SaveBatch is a helper method to define mock.On call
+//   - ctx context.Context
 //   - metrics []model.Metrics
-func (_e *MockMetricsRepository_Expecter) SaveBatch(metrics interface{}) *MockMetricsRepository_SaveBatch_Call {
-	return &MockMetricsRepository_SaveBatch_Call{Call: _e.mock.On("SaveBatch", metrics)}
+func (_e *MockMetricsRepository_Expecter) SaveBatch(ctx interface{}, metrics interface{}) *MockMetricsRepository_SaveBatch_Call {
+	return &MockMetricsRepository_SaveBatch_Call{Call: _e.mock.On("SaveBatch", ctx, metrics)}
 }
 
-func (_c *MockMetricsRepository_SaveBatch_Call) Run(run func(metrics []model.Metrics)) *MockMetricsRepository_SaveBatch_Call {
+func (_c *MockMetricsRepository_SaveBatch_Call) Run(run func(ctx context.Context, metrics []model.Metrics)) *MockMetricsRepository_SaveBatch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]model.Metrics))
+		run(args[0].(context.Context), args[1].([]model.Metrics))
 	})
 	return _c
 }
@@ -62,22 +65,22 @@ func (_c *MockMetricsRepository_SaveBatch_Call) Return(_a0 error) *MockMetricsRe
 	return _c
 }
 
-func (_c *MockMetricsRepository_SaveBatch_Call) RunAndReturn(run func([]model.Metrics) error) *MockMetricsRepository_SaveBatch_Call {
+func (_c *MockMetricsRepository_SaveBatch_Call) RunAndReturn(run func(context.Context, []model.Metrics) error) *MockMetricsRepository_SaveBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// List provides a mock function with no fields
-func (_m *MockMetricsRepository) List() []model.Metrics {
-	ret := _m.Called()
+// List provides a mock function with given fields: ctx
+func (_m *MockMetricsRepository) List(ctx context.Context) []model.Metrics {
+	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
 	}
 
 	var r0 []model.Metrics
-	if rf, ok := ret.Get(0).(func() []model.Metrics); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(context.Context) []model.Metrics); ok {
+		r0 = rf(ctx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]model.Metrics)
@@ -93,13 +96,14 @@ type MockMetricsRepository_List_Call struct {
 }
 
 // List is a helper method to define mock.On call
-func (_e *MockMetricsRepository_Expecter) List() *MockMetricsRepository_List_Call {
-	return &MockMetricsRepository_List_Call{Call: _e.mock.On("List")}
+//   - ctx context.Context
+func (_e *MockMetricsRepository_Expecter) List(ctx interface{}) *MockMetricsRepository_List_Call {
+	return &MockMetricsRepository_List_Call{Call: _e.mock.On("List", ctx)}
 }
 
-func (_c *MockMetricsRepository_List_Call) Run(run func()) *MockMetricsRepository_List_Call {
+func (_c *MockMetricsRepository_List_Call) Run(run func(ctx context.Context)) *MockMetricsRepository_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		run(args[0].(context.Context))
 	})
 	return _c
 }
@@ -109,14 +113,14 @@ func (_c *MockMetricsRepository_List_Call) Return(_a0 []model.Metrics) *MockMetr
 	return _c
 }
 
-func (_c *MockMetricsRepository_List_Call) RunAndReturn(run func() []model.Metrics) *MockMetricsRepository_List_Call {
+func (_c *MockMetricsRepository_List_Call) RunAndReturn(run func(context.Context) []model.Metrics) *MockMetricsRepository_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// Load provides a mock function with given fields: metricType, name
-func (_m *MockMetricsRepository) Load(metricType string, name string) (model.Metrics, error) {
-	ret := _m.Called(metricType, name)
+// Load provides a mock function with given fields: ctx, metricType, name
+func (_m *MockMetricsRepository) Load(ctx context.Context, metricType string, name string) (model.Metrics, error) {
+	ret := _m.Called(ctx, metricType, name)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Load")
@@ -124,17 +128,17 @@ func (_m *MockMetricsRepository) Load(metricType string, name string) (model.Met
 
 	var r0 model.Metrics
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string, string) (model.Metrics, error)); ok {
-		return rf(metricType, name)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) (model.Metrics, error)); ok {
+		return rf(ctx, metricType, name)
 	}
-	if rf, ok := ret.Get(0).(func(string, string) model.Metrics); ok {
-		r0 = rf(metricType, name)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) model.Metrics); ok {
+		r0 = rf(ctx, metricType, name)
 	} else {
 		r0 = ret.Get(0).(model.Metrics)
 	}
 
-	if rf, ok := ret.Get(1).(func(string, string) error); ok {
-		r1 = rf(metricType, name)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, metricType, name)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -148,15 +152,16 @@ type MockMetricsRepository_Load_Call struct {
 }
 
 // Load is a helper method to define mock.On call
+//   - ctx context.Context
 //   - metricType string
 //   - name string
-func (_e *MockMetricsRepository_Expecter) Load(metricType interface{}, name interface{}) *MockMetricsRepository_Load_Call {
-	return &MockMetricsRepository_Load_Call{Call: _e.mock.On("Load", metricType, name)}
+func (_e *MockMetricsRepository_Expecter) Load(ctx interface{}, metricType interface{}, name interface{}) *MockMetricsRepository_Load_Call {
+	return &MockMetricsRepository_Load_Call{Call: _e.mock.On("Load", ctx, metricType, name)}
 }
 
-func (_c *MockMetricsRepository_Load_Call) Run(run func(metricType string, name string)) *MockMetricsRepository_Load_Call {
+func (_c *MockMetricsRepository_Load_Call) Run(run func(ctx context.Context, metricType string, name string)) *MockMetricsRepository_Load_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(string))
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
 	})
 	return _c
 }
@@ -166,22 +171,22 @@ func (_c *MockMetricsRepository_Load_Call) Return(_a0 model.Metrics, _a1 error) 
 	return _c
 }
 
-func (_c *MockMetricsRepository_Load_Call) RunAndReturn(run func(string, string) (model.Metrics, error)) *MockMetricsRepository_Load_Call {
+func (_c *MockMetricsRepository_Load_Call) RunAndReturn(run func(context.Context, string, string) (model.Metrics, error)) *MockMetricsRepository_Load_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// SaveCounter provides a mock function with given fields: name, delta
-func (_m *MockMetricsRepository) SaveCounter(name string, delta int64) error {
-	ret := _m.Called(name, delta)
+// SaveCounter provides a mock function with given fields: ctx, name, delta
+func (_m *MockMetricsRepository) SaveCounter(ctx context.Context, name string, delta int64) error {
+	ret := _m.Called(ctx, name, delta)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SaveCounter")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, int64) error); ok {
-		r0 = rf(name, delta)
+	if rf, ok := ret.Get(0).(func(context.Context, string, int64) error); ok {
+		r0 = rf(ctx, name, delta)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -195,15 +200,16 @@ type MockMetricsRepository_SaveCounter_Call struct {
 }
 
 // SaveCounter is a helper method to define mock.On call
+//   - ctx context.Context
 //   - name string
 //   - delta int64
-func (_e *MockMetricsRepository_Expecter) SaveCounter(name interface{}, delta interface{}) *MockMetricsRepository_SaveCounter_Call {
-	return &MockMetricsRepository_SaveCounter_Call{Call: _e.mock.On("SaveCounter", name, delta)}
+func (_e *MockMetricsRepository_Expecter) SaveCounter(ctx interface{}, name interface{}, delta interface{}) *MockMetricsRepository_SaveCounter_Call {
+	return &MockMetricsRepository_SaveCounter_Call{Call: _e.mock.On("SaveCounter", ctx, name, delta)}
 }
 
-func (_c *MockMetricsRepository_SaveCounter_Call) Run(run func(name string, delta int64)) *MockMetricsRepository_SaveCounter_Call {
+func (_c *MockMetricsRepository_SaveCounter_Call) Run(run func(ctx context.Context, name string, delta int64)) *MockMetricsRepository_SaveCounter_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(int64))
+		run(args[0].(context.Context), args[1].(string), args[2].(int64))
 	})
 	return _c
 }
@@ -213,22 +219,22 @@ func (_c *MockMetricsRepository_SaveCounter_Call) Return(_a0 error) *MockMetrics
 	return _c
 }
 
-func (_c *MockMetricsRepository_SaveCounter_Call) RunAndReturn(run func(string, int64) error) *MockMetricsRepository_SaveCounter_Call {
+func (_c *MockMetricsRepository_SaveCounter_Call) RunAndReturn(run func(context.Context, string, int64) error) *MockMetricsRepository_SaveCounter_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// SaveGauge provides a mock function with given fields: name, value
-func (_m *MockMetricsRepository) SaveGauge(name string, value float64) error {
-	ret := _m.Called(name, value)
+// SaveGauge provides a mock function with given fields: ctx, name, value
+func (_m *MockMetricsRepository) SaveGauge(ctx context.Context, name string, value float64) error {
+	ret := _m.Called(ctx, name, value)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SaveGauge")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, float64) error); ok {
-		r0 = rf(name, value)
+	if rf, ok := ret.Get(0).(func(context.Context, string, float64) error); ok {
+		r0 = rf(ctx, name, value)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -242,15 +248,16 @@ type MockMetricsRepository_SaveGauge_Call struct {
 }
 
 // SaveGauge is a helper method to define mock.On call
+//   - ctx context.Context
 //   - name string
 //   - value float64
-func (_e *MockMetricsRepository_Expecter) SaveGauge(name interface{}, value interface{}) *MockMetricsRepository_SaveGauge_Call {
-	return &MockMetricsRepository_SaveGauge_Call{Call: _e.mock.On("SaveGauge", name, value)}
+func (_e *MockMetricsRepository_Expecter) SaveGauge(ctx interface{}, name interface{}, value interface{}) *MockMetricsRepository_SaveGauge_Call {
+	return &MockMetricsRepository_SaveGauge_Call{Call: _e.mock.On("SaveGauge", ctx, name, value)}
 }
 
-func (_c *MockMetricsRepository_SaveGauge_Call) Run(run func(name string, value float64)) *MockMetricsRepository_SaveGauge_Call {
+func (_c *MockMetricsRepository_SaveGauge_Call) Run(run func(ctx context.Context, name string, value float64)) *MockMetricsRepository_SaveGauge_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(float64))
+		run(args[0].(context.Context), args[1].(string), args[2].(float64))
 	})
 	return _c
 }
@@ -260,7 +267,7 @@ func (_c *MockMetricsRepository_SaveGauge_Call) Return(_a0 error) *MockMetricsRe
 	return _c
 }
 
-func (_c *MockMetricsRepository_SaveGauge_Call) RunAndReturn(run func(string, float64) error) *MockMetricsRepository_SaveGauge_Call {
+func (_c *MockMetricsRepository_SaveGauge_Call) RunAndReturn(run func(context.Context, string, float64) error) *MockMetricsRepository_SaveGauge_Call {
 	_c.Call.Return(run)
 	return _c
 }

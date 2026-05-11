@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"sync"
@@ -26,7 +27,7 @@ func NewMetricsRepository() *InMemoryMetricsRepository {
 	}
 }
 
-func (r *InMemoryMetricsRepository) SaveGauge(name string, value float64) error {
+func (r *InMemoryMetricsRepository) SaveGauge(_ context.Context, name string, value float64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -34,7 +35,7 @@ func (r *InMemoryMetricsRepository) SaveGauge(name string, value float64) error 
 	return nil
 }
 
-func (r *InMemoryMetricsRepository) SaveCounter(name string, delta int64) error {
+func (r *InMemoryMetricsRepository) SaveCounter(_ context.Context, name string, delta int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -42,7 +43,7 @@ func (r *InMemoryMetricsRepository) SaveCounter(name string, delta int64) error 
 	return nil
 }
 
-func (r *InMemoryMetricsRepository) SaveBatch(metrics []model.Metrics) error {
+func (r *InMemoryMetricsRepository) SaveBatch(_ context.Context, metrics []model.Metrics) error {
 	for _, metric := range metrics {
 		if err := validateMetric(metric); err != nil {
 			return err
@@ -81,7 +82,7 @@ func validateMetric(metric model.Metrics) error {
 	return nil
 }
 
-func (r *InMemoryMetricsRepository) Load(metricType, name string) (model.Metrics, error) {
+func (r *InMemoryMetricsRepository) Load(_ context.Context, metricType, name string) (model.Metrics, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -145,7 +146,7 @@ func (r *InMemoryMetricsRepository) Restore(metrics []model.Metrics) error {
 	return nil
 }
 
-func (r *InMemoryMetricsRepository) List() []model.Metrics {
+func (r *InMemoryMetricsRepository) List(_ context.Context) []model.Metrics {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

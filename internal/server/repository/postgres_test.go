@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"regexp"
@@ -42,7 +43,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("Alloc", model.Gauge, 12.5).
 				WillReturnResult(sqlmock.NewResult(0, 1))
 
-			err := repo.SaveGauge("Alloc", 12.5)
+			err := repo.SaveGauge(context.Background(), "Alloc", 12.5)
 
 			require.NoError(t, err)
 		})
@@ -55,7 +56,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("Alloc", model.Gauge, 12.5).
 				WillReturnError(saveErr)
 
-			err := repo.SaveGauge("Alloc", 12.5)
+			err := repo.SaveGauge(context.Background(), "Alloc", 12.5)
 
 			require.Error(t, err)
 			assert.ErrorIs(t, err, saveErr)
@@ -70,7 +71,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("PollCount", model.Counter, int64(3)).
 				WillReturnResult(sqlmock.NewResult(0, 1))
 
-			err := repo.SaveCounter("PollCount", 3)
+			err := repo.SaveCounter(context.Background(), "PollCount", 3)
 
 			require.NoError(t, err)
 		})
@@ -83,7 +84,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("PollCount", model.Counter, int64(3)).
 				WillReturnError(saveErr)
 
-			err := repo.SaveCounter("PollCount", 3)
+			err := repo.SaveCounter(context.Background(), "PollCount", 3)
 
 			require.Error(t, err)
 			assert.ErrorIs(t, err, saveErr)
@@ -100,7 +101,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("Alloc", model.Gauge, nil, value, "PollCount", model.Counter, delta, nil).
 				WillReturnResult(sqlmock.NewResult(0, 1))
 
-			err := repo.SaveBatch([]model.Metrics{
+			err := repo.SaveBatch(context.Background(), []model.Metrics{
 				{ID: "Alloc", MType: model.Gauge, Value: &value},
 				{ID: "PollCount", MType: model.Counter, Delta: &delta},
 			})
@@ -119,7 +120,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("Alloc", model.Gauge, nil, lastValue, "PollCount", model.Counter, int64(7), nil).
 				WillReturnResult(sqlmock.NewResult(0, 1))
 
-			err := repo.SaveBatch([]model.Metrics{
+			err := repo.SaveBatch(context.Background(), []model.Metrics{
 				{ID: "Alloc", MType: model.Gauge, Value: &firstValue},
 				{ID: "PollCount", MType: model.Counter, Delta: &firstDelta},
 				{ID: "Alloc", MType: model.Gauge, Value: &lastValue},
@@ -138,7 +139,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("Alloc", model.Gauge, nil, value).
 				WillReturnError(saveErr)
 
-			err := repo.SaveBatch([]model.Metrics{
+			err := repo.SaveBatch(context.Background(), []model.Metrics{
 				{ID: "Alloc", MType: model.Gauge, Value: &value},
 			})
 
@@ -157,7 +158,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("Alloc", model.Gauge).
 				WillReturnRows(rows)
 
-			metric, err := repo.Load(model.Gauge, "Alloc")
+			metric, err := repo.Load(context.Background(), model.Gauge, "Alloc")
 
 			require.NoError(t, err)
 			assert.Equal(t, "Alloc", metric.ID)
@@ -176,7 +177,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("PollCount", model.Counter).
 				WillReturnRows(rows)
 
-			metric, err := repo.Load(model.Counter, "PollCount")
+			metric, err := repo.Load(context.Background(), model.Counter, "PollCount")
 
 			require.NoError(t, err)
 			assert.Equal(t, "PollCount", metric.ID)
@@ -193,7 +194,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("Alloc", model.Gauge).
 				WillReturnError(sql.ErrNoRows)
 
-			_, err := repo.Load(model.Gauge, "Alloc")
+			_, err := repo.Load(context.Background(), model.Gauge, "Alloc")
 
 			require.ErrorIs(t, err, repository.ErrMetricNotFound)
 		})
@@ -206,7 +207,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 				WithArgs("Alloc", model.Gauge).
 				WillReturnError(loadErr)
 
-			_, err := repo.Load(model.Gauge, "Alloc")
+			_, err := repo.Load(context.Background(), model.Gauge, "Alloc")
 
 			require.Error(t, err)
 			assert.ErrorIs(t, err, loadErr)
@@ -223,7 +224,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 			mock.ExpectQuery(regexp.QuoteMeta("SELECT id, type, delta, value")).
 				WillReturnRows(rows)
 
-			metrics := repo.List()
+			metrics := repo.List(context.Background())
 
 			require.Len(t, metrics, 2)
 			assert.Equal(t, "Alloc", metrics[0].ID)
@@ -242,7 +243,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 			mock.ExpectQuery(regexp.QuoteMeta("SELECT id, type, delta, value")).
 				WillReturnError(errors.New("select failed"))
 
-			metrics := repo.List()
+			metrics := repo.List(context.Background())
 
 			assert.Empty(t, metrics)
 		})
@@ -255,7 +256,7 @@ func TestPostgresMetricsRepository(t *testing.T) {
 			mock.ExpectQuery(regexp.QuoteMeta("SELECT id, type, delta, value")).
 				WillReturnRows(rows)
 
-			metrics := repo.List()
+			metrics := repo.List(context.Background())
 
 			assert.Empty(t, metrics)
 		})

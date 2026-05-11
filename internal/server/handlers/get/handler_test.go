@@ -1,6 +1,7 @@
 package get_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -31,9 +32,9 @@ func TestGetMetricHandler(t *testing.T) {
 
 			value := 12.5
 			expected := model.Metrics{ID: "Alloc", MType: model.Gauge, Value: &value}
-			repo.EXPECT().Load(model.Gauge, "Alloc").Return(expected, nil)
+			repo.EXPECT().Load(context.Background(), model.Gauge, "Alloc").Return(expected, nil)
 
-			result, err := handler.Execute(model.Gauge, "Alloc")
+			result, err := handler.Execute(context.Background(), model.Gauge, "Alloc")
 
 			require.NoError(t, err)
 			assert.Equal(t, expected, result)
@@ -42,9 +43,9 @@ func TestGetMetricHandler(t *testing.T) {
 		t.Run("Должен вернуть ошибку not found уровня handler", func(t *testing.T) {
 			setup(t)
 
-			repo.EXPECT().Load(model.Gauge, "Alloc").Return(model.Metrics{}, repository.ErrMetricNotFound)
+			repo.EXPECT().Load(context.Background(), model.Gauge, "Alloc").Return(model.Metrics{}, repository.ErrMetricNotFound)
 
-			_, err := handler.Execute(model.Gauge, "Alloc")
+			_, err := handler.Execute(context.Background(), model.Gauge, "Alloc")
 
 			require.ErrorIs(t, err, get.ErrMetricNotFound)
 		})
@@ -53,9 +54,9 @@ func TestGetMetricHandler(t *testing.T) {
 			setup(t)
 
 			loadErr := errors.New("database unavailable")
-			repo.EXPECT().Load(model.Gauge, "Alloc").Return(model.Metrics{}, loadErr)
+			repo.EXPECT().Load(context.Background(), model.Gauge, "Alloc").Return(model.Metrics{}, loadErr)
 
-			_, err := handler.Execute(model.Gauge, "Alloc")
+			_, err := handler.Execute(context.Background(), model.Gauge, "Alloc")
 
 			require.ErrorIs(t, err, loadErr)
 		})

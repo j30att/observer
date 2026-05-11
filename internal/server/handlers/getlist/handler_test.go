@@ -1,6 +1,7 @@
 package getlist_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,9 +33,9 @@ func TestGetListMetricHandler(t *testing.T) {
 				{ID: "Alloc", MType: model.Gauge, Value: &value},
 				{ID: "PollCount", MType: model.Counter, Delta: &delta},
 			}
-			repo.EXPECT().List().Return(expected)
+			repo.EXPECT().List(context.Background()).Return(expected)
 
-			result := handler.Execute()
+			result := handler.Execute(context.Background())
 
 			assert.Equal(t, expected, result)
 		})

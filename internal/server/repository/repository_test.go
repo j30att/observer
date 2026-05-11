@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,10 +23,10 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 		t.Run("Должен сохранить и загрузить gauge", func(t *testing.T) {
 			setup(t)
 
-			err := repo.SaveGauge("Alloc", 12.5)
+			err := repo.SaveGauge(context.Background(), "Alloc", 12.5)
 			require.NoError(t, err)
 
-			metric, err := repo.Load(model.Gauge, "Alloc")
+			metric, err := repo.Load(context.Background(), model.Gauge, "Alloc")
 
 			require.NoError(t, err)
 			assert.Equal(t, "Alloc", metric.ID)
@@ -37,10 +38,10 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 		t.Run("Должен накапливать counter", func(t *testing.T) {
 			setup(t)
 
-			require.NoError(t, repo.SaveCounter("PollCount", 2))
-			require.NoError(t, repo.SaveCounter("PollCount", 3))
+			require.NoError(t, repo.SaveCounter(context.Background(), "PollCount", 2))
+			require.NoError(t, repo.SaveCounter(context.Background(), "PollCount", 3))
 
-			metric, err := repo.Load(model.Counter, "PollCount")
+			metric, err := repo.Load(context.Background(), model.Counter, "PollCount")
 
 			require.NoError(t, err)
 			require.NotNil(t, metric.Delta)
@@ -50,7 +51,7 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 		t.Run("Должен вернуть ErrMetricNotFound для отсутствующей gauge", func(t *testing.T) {
 			setup(t)
 
-			_, err := repo.Load(model.Gauge, "UnknownMetric")
+			_, err := repo.Load(context.Background(), model.Gauge, "UnknownMetric")
 
 			require.ErrorIs(t, err, repository.ErrMetricNotFound)
 		})
@@ -58,7 +59,7 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 		t.Run("Должен вернуть ErrMetricNotFound для неподдержанного типа", func(t *testing.T) {
 			setup(t)
 
-			_, err := repo.Load("summary", "Alloc")
+			_, err := repo.Load(context.Background(), "summary", "Alloc")
 
 			require.ErrorIs(t, err, repository.ErrMetricNotFound)
 		})
@@ -68,10 +69,10 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 		t.Run("Должен вернуть все сохранённые метрики", func(t *testing.T) {
 			setup(t)
 
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
-			require.NoError(t, repo.SaveCounter("PollCount", 3))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
+			require.NoError(t, repo.SaveCounter(context.Background(), "PollCount", 3))
 
-			metrics := repo.List()
+			metrics := repo.List(context.Background())
 
 			require.Len(t, metrics, 2)
 		})
@@ -83,19 +84,19 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 
 			value := 12.5
 			delta := int64(2)
-			err := repo.SaveBatch([]model.Metrics{
+			err := repo.SaveBatch(context.Background(), []model.Metrics{
 				{ID: "Alloc", MType: model.Gauge, Value: &value},
 				{ID: "PollCount", MType: model.Counter, Delta: &delta},
 			})
 
 			require.NoError(t, err)
 
-			gauge, err := repo.Load(model.Gauge, "Alloc")
+			gauge, err := repo.Load(context.Background(), model.Gauge, "Alloc")
 			require.NoError(t, err)
 			require.NotNil(t, gauge.Value)
 			assert.Equal(t, value, *gauge.Value)
 
-			counter, err := repo.Load(model.Counter, "PollCount")
+			counter, err := repo.Load(context.Background(), model.Counter, "PollCount")
 			require.NoError(t, err)
 			require.NotNil(t, counter.Delta)
 			assert.Equal(t, delta, *counter.Delta)
@@ -104,20 +105,20 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 		t.Run("Должен сохранить текущие метрики если batch невалидный", func(t *testing.T) {
 			setup(t)
 
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
 			value := 99.9
 
-			err := repo.SaveBatch([]model.Metrics{
+			err := repo.SaveBatch(context.Background(), []model.Metrics{
 				{ID: "HeapAlloc", MType: model.Gauge, Value: &value},
 				{ID: "PollCount", MType: model.Counter},
 			})
 
 			require.ErrorIs(t, err, repository.ErrInvalidMetric)
 
-			_, err = repo.Load(model.Gauge, "HeapAlloc")
+			_, err = repo.Load(context.Background(), model.Gauge, "HeapAlloc")
 			require.ErrorIs(t, err, repository.ErrMetricNotFound)
 
-			metric, err := repo.Load(model.Gauge, "Alloc")
+			metric, err := repo.Load(context.Background(), model.Gauge, "Alloc")
 			require.NoError(t, err)
 			require.NotNil(t, metric.Value)
 			assert.Equal(t, 12.5, *metric.Value)
@@ -137,12 +138,12 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 
 			require.NoError(t, err)
 
-			gauge, err := repo.Load(model.Gauge, "Alloc")
+			gauge, err := repo.Load(context.Background(), model.Gauge, "Alloc")
 			require.NoError(t, err)
 			require.NotNil(t, gauge.Value)
 			assert.Equal(t, value, *gauge.Value)
 
-			counter, err := repo.Load(model.Counter, "PollCount")
+			counter, err := repo.Load(context.Background(), model.Counter, "PollCount")
 			require.NoError(t, err)
 			require.NotNil(t, counter.Delta)
 			assert.Equal(t, delta, *counter.Delta)
@@ -151,19 +152,19 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 		t.Run("Должен заменить текущие метрики", func(t *testing.T) {
 			setup(t)
 
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
-			require.NoError(t, repo.SaveCounter("PollCount", 42))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
+			require.NoError(t, repo.SaveCounter(context.Background(), "PollCount", 42))
 
 			value := 7.5
 			err := repo.Restore([]model.Metrics{{ID: "HeapAlloc", MType: model.Gauge, Value: &value}})
 			require.NoError(t, err)
 
-			_, err = repo.Load(model.Gauge, "Alloc")
+			_, err = repo.Load(context.Background(), model.Gauge, "Alloc")
 			require.ErrorIs(t, err, repository.ErrMetricNotFound)
-			_, err = repo.Load(model.Counter, "PollCount")
+			_, err = repo.Load(context.Background(), model.Counter, "PollCount")
 			require.ErrorIs(t, err, repository.ErrMetricNotFound)
 
-			metric, err := repo.Load(model.Gauge, "HeapAlloc")
+			metric, err := repo.Load(context.Background(), model.Gauge, "HeapAlloc")
 			require.NoError(t, err)
 			require.NotNil(t, metric.Value)
 			assert.Equal(t, value, *metric.Value)
@@ -180,12 +181,12 @@ func TestInMemoryMetricsRepository(t *testing.T) {
 		t.Run("Должен сохранить текущие метрики если snapshot невалидный", func(t *testing.T) {
 			setup(t)
 
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
 
 			err := repo.Restore([]model.Metrics{{ID: "Alloc", MType: "summary"}})
 			require.ErrorIs(t, err, repository.ErrInvalidMetric)
 
-			metric, err := repo.Load(model.Gauge, "Alloc")
+			metric, err := repo.Load(context.Background(), model.Gauge, "Alloc")
 			require.NoError(t, err)
 			require.NotNil(t, metric.Value)
 			assert.Equal(t, 12.5, *metric.Value)

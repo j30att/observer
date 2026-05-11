@@ -3,6 +3,8 @@
 package mocks
 
 import (
+	context "context"
+
 	model "j30att/observer/internal/server/model"
 
 	mock "github.com/stretchr/testify/mock"
@@ -21,17 +23,17 @@ func (_m *MockMetricsLister) EXPECT() *MockMetricsLister_Expecter {
 	return &MockMetricsLister_Expecter{mock: &_m.Mock}
 }
 
-// List provides a mock function with no fields
-func (_m *MockMetricsLister) List() []model.Metrics {
-	ret := _m.Called()
+// List provides a mock function with given fields: ctx
+func (_m *MockMetricsLister) List(ctx context.Context) []model.Metrics {
+	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
 	}
 
 	var r0 []model.Metrics
-	if rf, ok := ret.Get(0).(func() []model.Metrics); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(context.Context) []model.Metrics); ok {
+		r0 = rf(ctx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]model.Metrics)
@@ -47,13 +49,14 @@ type MockMetricsLister_List_Call struct {
 }
 
 // List is a helper method to define mock.On call
-func (_e *MockMetricsLister_Expecter) List() *MockMetricsLister_List_Call {
-	return &MockMetricsLister_List_Call{Call: _e.mock.On("List")}
+//   - ctx context.Context
+func (_e *MockMetricsLister_Expecter) List(ctx interface{}) *MockMetricsLister_List_Call {
+	return &MockMetricsLister_List_Call{Call: _e.mock.On("List", ctx)}
 }
 
-func (_c *MockMetricsLister_List_Call) Run(run func()) *MockMetricsLister_List_Call {
+func (_c *MockMetricsLister_List_Call) Run(run func(ctx context.Context)) *MockMetricsLister_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		run(args[0].(context.Context))
 	})
 	return _c
 }
@@ -63,7 +66,7 @@ func (_c *MockMetricsLister_List_Call) Return(_a0 []model.Metrics) *MockMetricsL
 	return _c
 }
 
-func (_c *MockMetricsLister_List_Call) RunAndReturn(run func() []model.Metrics) *MockMetricsLister_List_Call {
+func (_c *MockMetricsLister_List_Call) RunAndReturn(run func(context.Context) []model.Metrics) *MockMetricsLister_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

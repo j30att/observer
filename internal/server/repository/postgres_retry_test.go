@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"regexp"
 	"testing"
@@ -56,7 +57,7 @@ func TestPostgresMetricsRepositoryRetry(t *testing.T) {
 			WithArgs("Alloc", model.Gauge, 12.5).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
-		err := repo.SaveGauge("Alloc", 12.5)
+		err := repo.SaveGauge(context.Background(), "Alloc", 12.5)
 
 		require.NoError(t, err)
 	})
@@ -69,7 +70,7 @@ func TestPostgresMetricsRepositoryRetry(t *testing.T) {
 			WithArgs("Alloc", model.Gauge, 12.5).
 			WillReturnError(saveErr)
 
-		err := repo.SaveGauge("Alloc", 12.5)
+		err := repo.SaveGauge(context.Background(), "Alloc", 12.5)
 
 		require.ErrorIs(t, err, saveErr)
 	})

@@ -1,6 +1,7 @@
 package get
 
 import (
+	"context"
 	"errors"
 
 	"j30att/observer/internal/server/model"
@@ -10,7 +11,7 @@ import (
 var ErrMetricNotFound = errors.New("metric not found")
 
 type metricsLoader interface {
-	Load(metricType, name string) (model.Metrics, error)
+	Load(ctx context.Context, metricType, name string) (model.Metrics, error)
 }
 
 type Handler struct {
@@ -21,8 +22,8 @@ func New(repo metricsLoader) *Handler {
 	return &Handler{repo: repo}
 }
 
-func (h *Handler) Execute(metricType, name string) (model.Metrics, error) {
-	metric, err := h.repo.Load(metricType, name)
+func (h *Handler) Execute(ctx context.Context, metricType, name string) (model.Metrics, error) {
+	metric, err := h.repo.Load(ctx, metricType, name)
 	if err != nil {
 		if errors.Is(err, repository.ErrMetricNotFound) {
 			return model.Metrics{}, ErrMetricNotFound

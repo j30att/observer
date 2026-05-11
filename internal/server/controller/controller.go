@@ -50,7 +50,7 @@ func (c *MetricController) UpdateMetric(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := c.updateMetricCommand.Execute(metricType, name, value)
+	err := c.updateMetricCommand.Execute(r.Context(), metricType, name, value)
 	if err == nil {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -81,12 +81,12 @@ func (c *MetricController) UpdateMetricJSON(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := c.updateMetricCommand.Execute(metric.MType, metric.ID, rawValue); err != nil {
+	if err := c.updateMetricCommand.Execute(r.Context(), metric.MType, metric.ID, rawValue); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	savedMetric, err := c.getMetricQuery.Execute(metric.MType, metric.ID)
+	savedMetric, err := c.getMetricQuery.Execute(r.Context(), metric.MType, metric.ID)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, get.ErrMetricNotFound) {
@@ -115,7 +115,7 @@ func (c *MetricController) UpdateMetricsJSON(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := c.updateMetricCommand.ExecuteBatch(metrics); err != nil {
+	if err := c.updateMetricCommand.ExecuteBatch(r.Context(), metrics); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -131,7 +131,7 @@ func (c *MetricController) GetMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metric, err := c.getMetricQuery.Execute(metricType, name)
+	metric, err := c.getMetricQuery.Execute(r.Context(), metricType, name)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, get.ErrMetricNotFound) {
@@ -162,7 +162,7 @@ func (c *MetricController) GetMetricJSON(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	metric, err := c.getMetricQuery.Execute(metricRequest.MType, metricRequest.ID)
+	metric, err := c.getMetricQuery.Execute(r.Context(), metricRequest.MType, metricRequest.ID)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, get.ErrMetricNotFound) {
@@ -176,8 +176,8 @@ func (c *MetricController) GetMetricJSON(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, metric)
 }
 
-func (c *MetricController) ListMetrics(w http.ResponseWriter, _ *http.Request) {
-	metrics := c.listMetricsQuery.Execute()
+func (c *MetricController) ListMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics := c.listMetricsQuery.Execute(r.Context())
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

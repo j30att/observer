@@ -26,8 +26,7 @@ func NewPostgresMetricsRepository(db *sql.DB) *PostgresMetricsRepository {
 	}
 }
 
-func (r *PostgresMetricsRepository) SaveGauge(name string, value float64) error {
-	ctx := context.Background()
+func (r *PostgresMetricsRepository) SaveGauge(ctx context.Context, name string, value float64) error {
 	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
 		_, execErr := r.db.ExecContext(
 			ctx,
@@ -50,8 +49,7 @@ func (r *PostgresMetricsRepository) SaveGauge(name string, value float64) error 
 	return nil
 }
 
-func (r *PostgresMetricsRepository) SaveCounter(name string, delta int64) error {
-	ctx := context.Background()
+func (r *PostgresMetricsRepository) SaveCounter(ctx context.Context, name string, delta int64) error {
 	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
 		_, execErr := r.db.ExecContext(
 			ctx,
@@ -74,7 +72,7 @@ func (r *PostgresMetricsRepository) SaveCounter(name string, delta int64) error 
 	return nil
 }
 
-func (r *PostgresMetricsRepository) SaveBatch(metrics []model.Metrics) error {
+func (r *PostgresMetricsRepository) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
 	metrics, err := compactMetrics(metrics)
 	if err != nil {
 		return err
@@ -95,7 +93,6 @@ func (r *PostgresMetricsRepository) SaveBatch(metrics []model.Metrics) error {
 		}
 	}
 
-	ctx := context.Background()
 	err = retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
 		_, execErr := r.db.ExecContext(
 			ctx,
@@ -172,12 +169,11 @@ func compactMetrics(metrics []model.Metrics) ([]model.Metrics, error) {
 	return result, nil
 }
 
-func (r *PostgresMetricsRepository) Load(metricType, name string) (model.Metrics, error) {
+func (r *PostgresMetricsRepository) Load(ctx context.Context, metricType, name string) (model.Metrics, error) {
 	var metric model.Metrics
 	var delta sql.NullInt64
 	var value sql.NullFloat64
 
-	ctx := context.Background()
 	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
 		return r.db.QueryRowContext(
 			ctx,
@@ -207,9 +203,8 @@ func (r *PostgresMetricsRepository) Load(metricType, name string) (model.Metrics
 	return metric, nil
 }
 
-func (r *PostgresMetricsRepository) List() []model.Metrics {
+func (r *PostgresMetricsRepository) List(ctx context.Context) []model.Metrics {
 	var rows *sql.Rows
-	ctx := context.Background()
 	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
 		var queryErr error
 		rows, queryErr = r.db.QueryContext(

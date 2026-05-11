@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -33,11 +34,11 @@ func TestSyncPersistentRepository(t *testing.T) {
 
 			value := 12.5
 			snapshot := []model.Metrics{{ID: "Alloc", MType: model.Gauge, Value: &value}}
-			repo.EXPECT().SaveGauge("Alloc", value).Return(nil)
-			repo.EXPECT().List().Return(snapshot)
+			repo.EXPECT().SaveGauge(context.Background(), "Alloc", value).Return(nil)
+			repo.EXPECT().List(context.Background()).Return(snapshot)
 			saver.EXPECT().Save(snapshot).Return(nil)
 
-			err := persistentRepo.SaveGauge("Alloc", value)
+			err := persistentRepo.SaveGauge(context.Background(), "Alloc", value)
 
 			require.NoError(t, err)
 		})
@@ -46,9 +47,9 @@ func TestSyncPersistentRepository(t *testing.T) {
 			setup(t)
 
 			saveErr := errors.New("save gauge failed")
-			repo.EXPECT().SaveGauge("Alloc", 12.5).Return(saveErr)
+			repo.EXPECT().SaveGauge(context.Background(), "Alloc", 12.5).Return(saveErr)
 
-			err := persistentRepo.SaveGauge("Alloc", 12.5)
+			err := persistentRepo.SaveGauge(context.Background(), "Alloc", 12.5)
 
 			require.ErrorIs(t, err, saveErr)
 			repo.AssertNotCalled(t, "List")
@@ -61,11 +62,11 @@ func TestSyncPersistentRepository(t *testing.T) {
 			value := 12.5
 			saveErr := errors.New("save snapshot failed")
 			snapshot := []model.Metrics{{ID: "Alloc", MType: model.Gauge, Value: &value}}
-			repo.EXPECT().SaveGauge("Alloc", value).Return(nil)
-			repo.EXPECT().List().Return(snapshot)
+			repo.EXPECT().SaveGauge(context.Background(), "Alloc", value).Return(nil)
+			repo.EXPECT().List(context.Background()).Return(snapshot)
 			saver.EXPECT().Save(snapshot).Return(saveErr)
 
-			err := persistentRepo.SaveGauge("Alloc", value)
+			err := persistentRepo.SaveGauge(context.Background(), "Alloc", value)
 
 			require.ErrorIs(t, err, saveErr)
 		})
@@ -77,11 +78,11 @@ func TestSyncPersistentRepository(t *testing.T) {
 
 			delta := int64(5)
 			snapshot := []model.Metrics{{ID: "PollCount", MType: model.Counter, Delta: &delta}}
-			repo.EXPECT().SaveCounter("PollCount", int64(2)).Return(nil)
-			repo.EXPECT().List().Return(snapshot)
+			repo.EXPECT().SaveCounter(context.Background(), "PollCount", int64(2)).Return(nil)
+			repo.EXPECT().List(context.Background()).Return(snapshot)
 			saver.EXPECT().Save(snapshot).Return(nil)
 
-			err := persistentRepo.SaveCounter("PollCount", 2)
+			err := persistentRepo.SaveCounter(context.Background(), "PollCount", 2)
 
 			require.NoError(t, err)
 		})
@@ -97,11 +98,11 @@ func TestSyncPersistentRepository(t *testing.T) {
 				{ID: "Alloc", MType: model.Gauge, Value: &value},
 				{ID: "PollCount", MType: model.Counter, Delta: &delta},
 			}
-			repo.EXPECT().SaveBatch(batch).Return(nil)
-			repo.EXPECT().List().Return(batch)
+			repo.EXPECT().SaveBatch(context.Background(), batch).Return(nil)
+			repo.EXPECT().List(context.Background()).Return(batch)
 			saver.EXPECT().Save(batch).Return(nil)
 
-			err := persistentRepo.SaveBatch(batch)
+			err := persistentRepo.SaveBatch(context.Background(), batch)
 
 			require.NoError(t, err)
 		})
@@ -113,9 +114,9 @@ func TestSyncPersistentRepository(t *testing.T) {
 
 			value := 12.5
 			expected := model.Metrics{ID: "Alloc", MType: model.Gauge, Value: &value}
-			repo.EXPECT().Load(model.Gauge, "Alloc").Return(expected, nil)
+			repo.EXPECT().Load(context.Background(), model.Gauge, "Alloc").Return(expected, nil)
 
-			result, err := persistentRepo.Load(model.Gauge, "Alloc")
+			result, err := persistentRepo.Load(context.Background(), model.Gauge, "Alloc")
 
 			require.NoError(t, err)
 			assert.Equal(t, expected, result)
@@ -126,9 +127,9 @@ func TestSyncPersistentRepository(t *testing.T) {
 
 			value := 12.5
 			expected := []model.Metrics{{ID: "Alloc", MType: model.Gauge, Value: &value}}
-			repo.EXPECT().List().Return(expected)
+			repo.EXPECT().List(context.Background()).Return(expected)
 
-			result := persistentRepo.List()
+			result := persistentRepo.List(context.Background())
 
 			assert.Equal(t, expected, result)
 		})

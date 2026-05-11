@@ -3,6 +3,7 @@ package controller_test
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -83,7 +84,7 @@ func TestMetricController(t *testing.T) {
 			r.ServeHTTP(rec, req)
 
 			assert.Equal(t, http.StatusOK, rec.Code)
-			metric, err := repo.Load("gauge", "Alloc")
+			metric, err := repo.Load(context.Background(), "gauge", "Alloc")
 			require.NoError(t, err)
 			require.NotNil(t, metric.Value)
 			assert.Equal(t, 12.5, *metric.Value)
@@ -103,12 +104,12 @@ func TestMetricController(t *testing.T) {
 			assert.Equal(t, http.StatusOK, rec.Code)
 			assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
-			gauge, err := repo.Load("gauge", "Alloc")
+			gauge, err := repo.Load(context.Background(), "gauge", "Alloc")
 			require.NoError(t, err)
 			require.NotNil(t, gauge.Value)
 			assert.Equal(t, 12.5, *gauge.Value)
 
-			counter, err := repo.Load("counter", "PollCount")
+			counter, err := repo.Load(context.Background(), "counter", "PollCount")
 			require.NoError(t, err)
 			require.NotNil(t, counter.Delta)
 			assert.EqualValues(t, 2, *counter.Delta)
@@ -232,7 +233,7 @@ func TestMetricController(t *testing.T) {
 	t.Run("Тест value handlers", func(t *testing.T) {
 		t.Run("Должен вернуть сохранённое gauge value", func(t *testing.T) {
 			setup(t)
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
 
 			req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
 			rec := httptest.NewRecorder()
@@ -245,7 +246,7 @@ func TestMetricController(t *testing.T) {
 
 		t.Run("Должен не сжимать text/plain response", func(t *testing.T) {
 			setup(t)
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
 
 			req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
 			req.Header.Set("Accept-Encoding", "gzip")
@@ -260,7 +261,7 @@ func TestMetricController(t *testing.T) {
 
 		t.Run("Должен вернуть сохранённое JSON value", func(t *testing.T) {
 			setup(t)
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
 
 			req := newJSONRequest(t, http.MethodPost, "/value", map[string]any{
 				"id": "Alloc", "type": "gauge",
@@ -281,7 +282,7 @@ func TestMetricController(t *testing.T) {
 
 		t.Run("Должен вернуть gzip JSON response", func(t *testing.T) {
 			setup(t)
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
 
 			req := newJSONRequest(t, http.MethodPost, "/value", map[string]any{
 				"id": "Alloc", "type": "gauge",
@@ -303,7 +304,7 @@ func TestMetricController(t *testing.T) {
 
 		t.Run("Должен позволить trailing slash для JSON value", func(t *testing.T) {
 			setup(t)
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
 
 			req := newJSONRequest(t, http.MethodPost, "/value/", map[string]any{
 				"id": "Alloc", "type": "gauge",
@@ -318,7 +319,7 @@ func TestMetricController(t *testing.T) {
 
 		t.Run("Должен вернуть сохранённое counter value", func(t *testing.T) {
 			setup(t)
-			require.NoError(t, repo.SaveCounter("PollCount", 3))
+			require.NoError(t, repo.SaveCounter(context.Background(), "PollCount", 3))
 
 			req := httptest.NewRequest(http.MethodGet, "/value/counter/PollCount", nil)
 			rec := httptest.NewRecorder()
@@ -357,8 +358,8 @@ func TestMetricController(t *testing.T) {
 	t.Run("Тест list handler", func(t *testing.T) {
 		t.Run("Должен вернуть HTML page", func(t *testing.T) {
 			setup(t)
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
-			require.NoError(t, repo.SaveCounter("PollCount", 3))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
+			require.NoError(t, repo.SaveCounter(context.Background(), "PollCount", 3))
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			rec := httptest.NewRecorder()
@@ -373,8 +374,8 @@ func TestMetricController(t *testing.T) {
 
 		t.Run("Должен вернуть gzip HTML page", func(t *testing.T) {
 			setup(t)
-			require.NoError(t, repo.SaveGauge("Alloc", 12.5))
-			require.NoError(t, repo.SaveCounter("PollCount", 3))
+			require.NoError(t, repo.SaveGauge(context.Background(), "Alloc", 12.5))
+			require.NoError(t, repo.SaveCounter(context.Background(), "PollCount", 3))
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set("Accept-Encoding", "gzip")

@@ -65,10 +65,10 @@ func TestPeriodicSaver(t *testing.T) {
 
 			value := 12.5
 			metrics := []model.Metrics{{ID: "Alloc", MType: model.Gauge, Value: &value}}
-			source.EXPECT().List().Return(metrics)
+			source.EXPECT().List(context.Background()).Return(metrics)
 			target.EXPECT().Save(metrics).Return(nil)
 
-			err := saver.Save()
+			err := saver.Save(context.Background())
 
 			require.NoError(t, err)
 		})
@@ -81,7 +81,7 @@ func TestPeriodicSaver(t *testing.T) {
 			saved := make(chan struct{}, 1)
 			value := 12.5
 			metrics := []model.Metrics{{ID: "Alloc", MType: model.Gauge, Value: &value}}
-			source.EXPECT().List().Return(metrics).Maybe()
+			source.EXPECT().List(mock.Anything).Return(metrics).Maybe()
 			target.EXPECT().Save(metrics).Run(func([]model.Metrics) {
 				select {
 				case saved <- struct{}{}:
@@ -133,7 +133,7 @@ func TestPeriodicSaver(t *testing.T) {
 
 			saveErr := errors.New("save failed")
 			metrics := []model.Metrics{}
-			source.EXPECT().List().Return(metrics).Maybe()
+			source.EXPECT().List(mock.Anything).Return(metrics).Maybe()
 			target.EXPECT().Save(metrics).Return(saveErr).Maybe()
 
 			ctx, cancel := context.WithCancel(context.Background())

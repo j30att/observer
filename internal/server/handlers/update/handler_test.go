@@ -1,6 +1,7 @@
 package update_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -29,9 +30,9 @@ func TestUpdateMetricHandler(t *testing.T) {
 		t.Run("Должен сохранить gauge", func(t *testing.T) {
 			setup(t)
 
-			repo.EXPECT().SaveGauge("Alloc", 12.5).Return(nil)
+			repo.EXPECT().SaveGauge(context.Background(), "Alloc", 12.5).Return(nil)
 
-			err := handler.Execute(model.Gauge, "Alloc", "12.5")
+			err := handler.Execute(context.Background(), model.Gauge, "Alloc", "12.5")
 
 			require.NoError(t, err)
 		})
@@ -39,9 +40,9 @@ func TestUpdateMetricHandler(t *testing.T) {
 		t.Run("Должен сохранить counter", func(t *testing.T) {
 			setup(t)
 
-			repo.EXPECT().SaveCounter("PollCount", int64(2)).Return(nil)
+			repo.EXPECT().SaveCounter(context.Background(), "PollCount", int64(2)).Return(nil)
 
-			err := handler.Execute(model.Counter, "PollCount", "2")
+			err := handler.Execute(context.Background(), model.Counter, "PollCount", "2")
 
 			require.NoError(t, err)
 		})
@@ -49,7 +50,7 @@ func TestUpdateMetricHandler(t *testing.T) {
 		t.Run("Должен вернуть ошибку если тип метрики не поддерживается", func(t *testing.T) {
 			setup(t)
 
-			err := handler.Execute("summary", "Alloc", "12.5")
+			err := handler.Execute(context.Background(), "summary", "Alloc", "12.5")
 
 			require.ErrorIs(t, err, update.ErrUnsupportedMetricType)
 			repo.AssertNotCalled(t, "SaveGauge", mock.Anything, mock.Anything)
@@ -59,7 +60,7 @@ func TestUpdateMetricHandler(t *testing.T) {
 		t.Run("Должен вернуть ошибку если counter не число", func(t *testing.T) {
 			setup(t)
 
-			err := handler.Execute(model.Counter, "PollCount", "abc")
+			err := handler.Execute(context.Background(), model.Counter, "PollCount", "abc")
 
 			require.Error(t, err)
 			repo.AssertNotCalled(t, "SaveCounter", mock.Anything, mock.Anything)
@@ -69,9 +70,9 @@ func TestUpdateMetricHandler(t *testing.T) {
 			setup(t)
 
 			saveErr := errors.New("save failed")
-			repo.EXPECT().SaveGauge("Alloc", 12.5).Return(saveErr)
+			repo.EXPECT().SaveGauge(context.Background(), "Alloc", 12.5).Return(saveErr)
 
-			err := handler.Execute(model.Gauge, "Alloc", "12.5")
+			err := handler.Execute(context.Background(), model.Gauge, "Alloc", "12.5")
 
 			assert.ErrorIs(t, err, saveErr)
 		})
@@ -87,9 +88,9 @@ func TestUpdateMetricHandler(t *testing.T) {
 				{ID: "Alloc", MType: model.Gauge, Value: &value},
 				{ID: "PollCount", MType: model.Counter, Delta: &delta},
 			}
-			repo.EXPECT().SaveBatch(metrics).Return(nil)
+			repo.EXPECT().SaveBatch(context.Background(), metrics).Return(nil)
 
-			err := handler.ExecuteBatch(metrics)
+			err := handler.ExecuteBatch(context.Background(), metrics)
 
 			require.NoError(t, err)
 		})
@@ -97,7 +98,7 @@ func TestUpdateMetricHandler(t *testing.T) {
 		t.Run("Должен отклонить невалидную метрику до сохранения", func(t *testing.T) {
 			setup(t)
 
-			err := handler.ExecuteBatch([]model.Metrics{{ID: "Alloc", MType: model.Gauge}})
+			err := handler.ExecuteBatch(context.Background(), []model.Metrics{{ID: "Alloc", MType: model.Gauge}})
 
 			require.ErrorIs(t, err, update.ErrUnsupportedMetricType)
 			repo.AssertNotCalled(t, "SaveBatch", mock.Anything)
