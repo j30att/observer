@@ -52,14 +52,14 @@ func TestPingHandler(t *testing.T) {
 			assert.Equal(t, http.StatusInternalServerError, res.Code)
 		})
 
-		t.Run("Должен вернуть internal server error если база не задана", func(t *testing.T) {
+		t.Run("Должен вернуть OK если база не задана", func(t *testing.T) {
 			handler := ping.New(nil)
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", nil)
 			res := httptest.NewRecorder()
 
 			handler.Ping(res, req)
 
-			assert.Equal(t, http.StatusInternalServerError, res.Code)
+			assert.Equal(t, http.StatusOK, res.Code)
 		})
 	})
 }
