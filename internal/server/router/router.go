@@ -11,16 +11,12 @@ import (
 	"j30att/observer/internal/server/middlewares"
 )
 
-func NewRouter(metricController *controller.MetricController, logger zerolog.Logger, db ...ping.Pinger) http.Handler {
+func NewRouter(metricController *controller.MetricController, logger zerolog.Logger, db ping.Pinger) http.Handler {
 	r := chi.NewRouter()
 	r.Use(chimiddleware.StripSlashes)
 	r.Use(middlewares.Logger(logger))
 	r.Use(middlewares.Gzip)
-	var dbPinger ping.Pinger
-	if len(db) > 0 {
-		dbPinger = db[0]
-	}
-	pingHandler := ping.New(dbPinger)
+	pingHandler := ping.New(db)
 	r.Get("/ping", pingHandler.Ping)
 	r.Post("/updates", metricController.UpdateMetricsJSON)
 	r.Post("/update", metricController.UpdateMetricJSON)

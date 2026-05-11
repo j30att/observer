@@ -23,7 +23,7 @@ func TestPingHandler(t *testing.T) {
 		t.Helper()
 
 		pinger = pingmocks.NewMockPinger(t)
-		handler = &[]ping.Handler{ping.New(pinger)}[0]
+		handler = ping.New(pinger)
 	}
 
 	t.Run("Тест метода Ping", func(t *testing.T) {

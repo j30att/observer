@@ -14,8 +14,8 @@ type Handler struct {
 	db Pinger
 }
 
-func New(db Pinger) Handler {
-	return Handler{db: db}
+func New(db Pinger) *Handler {
+	return &Handler{db: db}
 }
 
 func (h Handler) Ping(w http.ResponseWriter, r *http.Request) {

@@ -37,7 +37,7 @@ func TestMetricController(t *testing.T) {
 		getMetricQuery := get.New(repo)
 		listMetricsQuery := getlist.New(repo)
 		metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-		r = router.NewRouter(metricController, testLogger)
+		r = router.NewRouter(metricController, testLogger, nil)
 	}
 
 	t.Run("Тест update handlers", func(t *testing.T) {
