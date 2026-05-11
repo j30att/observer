@@ -29,9 +29,6 @@ func Up(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
-	defer func() {
-		_, _ = m.Close()
-	}()
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("apply migrations: %w", err)
