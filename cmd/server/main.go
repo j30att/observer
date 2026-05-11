@@ -38,7 +38,12 @@ func main() {
 		}
 		defer db.Close()
 
-		if err := migrations.Up(db); err != nil {
+		pingCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		err = db.PingContext(pingCtx)
+		cancel()
+		if err != nil {
+			logger.Error().Err(err).Msg("database is unavailable")
+		} else if err := migrations.Up(db); err != nil {
 			logger.Fatal().Err(err).Msg("failed to apply database migrations")
 		}
 	}
