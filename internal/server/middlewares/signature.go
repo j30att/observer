@@ -63,7 +63,8 @@ func Signature(key string) func(http.Handler) http.Handler {
 			_ = requestBody.Close()
 			r.Body = io.NopCloser(bytes.NewReader(body))
 
-			if !signature.Verify(body, key, r.Header.Get(signature.Header)) {
+			requestSignature := r.Header.Get(signature.Header)
+			if requestSignature != "" && !signature.Verify(body, key, requestSignature) {
 				writeSignedError(w, "invalid request signature", http.StatusBadRequest, key)
 				return
 			}

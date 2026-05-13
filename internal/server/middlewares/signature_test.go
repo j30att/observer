@@ -66,6 +66,25 @@ func TestSignature(t *testing.T) {
 		assert.Equal(t, signature.Sign(rec.Body.Bytes(), "secret-key"), rec.Header().Get(signature.Header))
 	})
 
+	t.Run("Не проверяет входящий запрос без подписи", func(t *testing.T) {
+		handler := Signature("secret-key")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			assert.Equal(t, []byte("payload"), body)
+			_, err = w.Write([]byte("response body"))
+			require.NoError(t, err)
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, "/updates", bytes.NewBufferString("payload"))
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "response body", rec.Body.String())
+		assert.Equal(t, signature.Sign(rec.Body.Bytes(), "secret-key"), rec.Header().Get(signature.Header))
+	})
+
 	t.Run("Добавляет подпись ответа если handler не вызывал WriteHeader", func(t *testing.T) {
 		handler := Signature("secret-key")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, err := w.Write([]byte("response body"))
