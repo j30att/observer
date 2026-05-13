@@ -15,6 +15,7 @@ type ServerConfig struct {
 	FileStoragePath string
 	Restore         bool
 	DatabaseDSN     string
+	Key             string
 }
 
 func NewServerConfig() ServerConfig {
@@ -37,6 +38,7 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 	fs.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "file storage path")
 	fs.BoolVar(&cfg.Restore, "r", cfg.Restore, "restore metrics from file storage on startup")
 	fs.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "database connection DSN")
+	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
 
 	if err := fs.Parse(args); err != nil {
 		return ServerConfig{}, err
@@ -64,6 +66,10 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 
 	if value, ok := os.LookupEnv("DATABASE_DSN"); ok {
 		cfg.DatabaseDSN = value
+	}
+
+	if value, ok := os.LookupEnv("KEY"); ok {
+		cfg.Key = value
 	}
 
 	if storeIntervalSeconds < 0 {

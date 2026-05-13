@@ -19,7 +19,7 @@ func main() {
 	}
 	store := repository.NewMetricsRepository()
 	collector := collectors.NewRuntimeCollector()
-	sender := senders.NewHTTPSender(cfg.ServerAddress)
+	sender := senders.NewHTTPSender(cfg.ServerAddress, cfg.Key)
 	app := agent.New(cfg, store, collector, sender)
 
 	if err := app.Run(context.Background()); err != nil {

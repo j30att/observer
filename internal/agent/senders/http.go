@@ -15,19 +15,27 @@ import (
 	agentmodel "j30att/observer/internal/agent/model"
 	"j30att/observer/internal/compression"
 	"j30att/observer/internal/retry"
+	"j30att/observer/internal/signature"
 )
 
 type HTTPSender struct {
 	baseURL     *url.URL
 	client      *http.Client
 	retryDelays []time.Duration
+	key         string
 }
 
-func NewHTTPSender(address string) *HTTPSender {
+func NewHTTPSender(address string, key ...string) *HTTPSender {
+	signatureKey := ""
+	if len(key) > 0 {
+		signatureKey = key[0]
+	}
+
 	return &HTTPSender{
 		baseURL:     parseBaseURL(address),
 		client:      &http.Client{},
 		retryDelays: retry.DefaultDelays,
+		key:         signatureKey,
 	}
 }
 
@@ -104,6 +112,9 @@ func (s *HTTPSender) doSendMetrics(ctx context.Context, metricURL string, body [
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", compression.GzipEncoding)
 	req.Header.Set("Accept-Encoding", compression.GzipEncoding)
+	if s.key != "" {
+		req.Header.Set(signature.Header, signature.Sign(body, s.key))
+	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {

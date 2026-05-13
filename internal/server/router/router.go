@@ -11,10 +11,16 @@ import (
 	"j30att/observer/internal/server/middlewares"
 )
 
-func NewRouter(metricController *controller.MetricController, logger zerolog.Logger, db ping.Pinger) http.Handler {
+func NewRouter(metricController *controller.MetricController, logger zerolog.Logger, db ping.Pinger, key ...string) http.Handler {
+	signatureKey := ""
+	if len(key) > 0 {
+		signatureKey = key[0]
+	}
+
 	r := chi.NewRouter()
 	r.Use(chimiddleware.StripSlashes)
 	r.Use(middlewares.Logger(logger))
+	r.Use(middlewares.Signature(signatureKey))
 	r.Use(middlewares.Gzip)
 	pingHandler := ping.New(db)
 	r.Get("/ping", pingHandler.Ping)

@@ -19,6 +19,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Empty(t, cfg.FileStoragePath)
 			assert.True(t, cfg.Restore)
 			assert.Empty(t, cfg.DatabaseDSN)
+			assert.Empty(t, cfg.Key)
 		})
 	})
 
@@ -32,6 +33,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Empty(t, cfg.FileStoragePath)
 			assert.True(t, cfg.Restore)
 			assert.Empty(t, cfg.DatabaseDSN)
+			assert.Empty(t, cfg.Key)
 		})
 
 		t.Run("Должен переопределить values из flags", func(t *testing.T) {
@@ -41,6 +43,7 @@ func TestServerConfig(t *testing.T) {
 				"-f=/tmp/custom-metrics.json",
 				"-r=false",
 				"-d=postgres://user:password@example.com:5432/observer?sslmode=require",
+				"-k=flag-key",
 			})
 
 			require.NoError(t, err)
@@ -49,6 +52,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/custom-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://user:password@example.com:5432/observer?sslmode=require", cfg.DatabaseDSN)
+			assert.Equal(t, "flag-key", cfg.Key)
 		})
 
 		t.Run("Должен переопределить values из environment", func(t *testing.T) {
@@ -57,6 +61,7 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
 			t.Setenv("RESTORE", "false")
 			t.Setenv("DATABASE_DSN", "postgres://env-dsn")
+			t.Setenv("KEY", "env-key")
 
 			cfg, err := config.ParseServerConfig(nil)
 
@@ -66,6 +71,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://env-dsn", cfg.DatabaseDSN)
+			assert.Equal(t, "env-key", cfg.Key)
 		})
 
 		t.Run("Должен отдать приоритет environment над flags", func(t *testing.T) {
@@ -74,6 +80,7 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
 			t.Setenv("RESTORE", "false")
 			t.Setenv("DATABASE_DSN", "postgres://env-dsn")
+			t.Setenv("KEY", "env-key")
 
 			cfg, err := config.ParseServerConfig([]string{
 				"-a=127.0.0.1:9000",
@@ -81,6 +88,7 @@ func TestServerConfig(t *testing.T) {
 				"-f=/tmp/custom-metrics.json",
 				"-r=true",
 				"-d=postgres://flag-dsn",
+				"-k=flag-key",
 			})
 
 			require.NoError(t, err)
@@ -89,6 +97,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://env-dsn", cfg.DatabaseDSN)
+			assert.Equal(t, "env-key", cfg.Key)
 		})
 
 		t.Run("Ошибка, неизвестный flag", func(t *testing.T) {

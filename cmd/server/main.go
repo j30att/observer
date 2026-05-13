@@ -85,7 +85,7 @@ func main() {
 	getMetricQuery := get.New(metricsRepo)
 	listMetricsQuery := getlist.New(metricsRepo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController, logger, db)
+	r := router.NewRouter(metricController, logger, db, cfg.Key)
 
 	server := &http.Server{
 		Addr:              cfg.Address,
