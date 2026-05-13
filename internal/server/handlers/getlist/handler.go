@@ -1,11 +1,13 @@
 package getlist
 
 import (
+	"context"
+
 	"j30att/observer/internal/server/model"
 )
 
 type metricsLister interface {
-	List() []model.Metrics
+	List(ctx context.Context) []model.Metrics
 }
 
 type Handler struct {
@@ -16,6 +18,6 @@ func New(repo metricsLister) *Handler {
 	return &Handler{repo: repo}
 }
 
-func (h *Handler) Execute() []model.Metrics {
-	return h.repo.List()
+func (h *Handler) Execute(ctx context.Context) []model.Metrics {
+	return h.repo.List(ctx)
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/model"
 	"j30att/observer/internal/server/storage"
@@ -14,96 +15,96 @@ import (
 
 var testLogger = zerolog.Nop()
 
-func TestFileStorageSavesAndLoadsMetrics(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "metrics.json")
-	fileStorage := storage.NewFileStorage(path, testLogger)
+func TestFileStorage(t *testing.T) {
+	var (
+		path        string
+		fileStorage *storage.FileStorage
+	)
 
-	value := 12.5
-	delta := int64(42)
-	metrics := []model.Metrics{
-		{
-			ID:    "Alloc",
-			MType: model.Gauge,
-			Value: &value,
-		},
-		{
-			ID:    "PollCount",
-			MType: model.Counter,
-			Delta: &delta,
-		},
+	setup := func(t *testing.T) {
+		t.Helper()
+
+		path = filepath.Join(t.TempDir(), "metrics.json")
+		fileStorage = storage.NewFileStorage(path, testLogger)
 	}
 
-	require.NoError(t, fileStorage.Save(metrics))
+	t.Run("Тест метода Save", func(t *testing.T) {
+		t.Run("Должен сохранить и загрузить метрики", func(t *testing.T) {
+			setup(t)
 
-	_, loadedMetrics, err := storage.NewRestoredFileStorage(path, testLogger)
-	require.NoError(t, err)
-	require.Len(t, loadedMetrics, 2)
+			value := 12.5
+			delta := int64(42)
+			metrics := []model.Metrics{
+				{ID: "Alloc", MType: model.Gauge, Value: &value},
+				{ID: "PollCount", MType: model.Counter, Delta: &delta},
+			}
 
-	require.Equal(t, "Alloc", loadedMetrics[0].ID)
-	require.Equal(t, model.Gauge, loadedMetrics[0].MType)
-	require.NotNil(t, loadedMetrics[0].Value)
-	require.Equal(t, value, *loadedMetrics[0].Value)
+			require.NoError(t, fileStorage.Save(metrics))
 
-	require.Equal(t, "PollCount", loadedMetrics[1].ID)
-	require.Equal(t, model.Counter, loadedMetrics[1].MType)
-	require.NotNil(t, loadedMetrics[1].Delta)
-	require.Equal(t, delta, *loadedMetrics[1].Delta)
-}
+			_, loadedMetrics, err := storage.NewRestoredFileStorage(path, testLogger)
 
-func TestFileStorageSavesMetricsAsJSONArray(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "metrics.json")
-	fileStorage := storage.NewFileStorage(path, testLogger)
+			require.NoError(t, err)
+			require.Len(t, loadedMetrics, 2)
+			assert.Equal(t, "Alloc", loadedMetrics[0].ID)
+			assert.Equal(t, model.Gauge, loadedMetrics[0].MType)
+			require.NotNil(t, loadedMetrics[0].Value)
+			assert.Equal(t, value, *loadedMetrics[0].Value)
+			assert.Equal(t, "PollCount", loadedMetrics[1].ID)
+			assert.Equal(t, model.Counter, loadedMetrics[1].MType)
+			require.NotNil(t, loadedMetrics[1].Delta)
+			assert.Equal(t, delta, *loadedMetrics[1].Delta)
+		})
 
-	value := 12.5
-	delta := int64(42)
-	metrics := []model.Metrics{
-		{ID: "LastGC", MType: model.Gauge, Value: &value},
-		{ID: "NumGC", MType: model.Counter, Delta: &delta},
-	}
+		t.Run("Должен сохранить метрики как JSON array", func(t *testing.T) {
+			setup(t)
 
-	require.NoError(t, fileStorage.Save(metrics))
+			value := 12.5
+			delta := int64(42)
+			metrics := []model.Metrics{
+				{ID: "LastGC", MType: model.Gauge, Value: &value},
+				{ID: "NumGC", MType: model.Counter, Delta: &delta},
+			}
 
-	rawBody, err := os.ReadFile(path)
-	require.NoError(t, err)
+			require.NoError(t, fileStorage.Save(metrics))
 
-	var savedMetrics []map[string]any
-	require.NoError(t, json.Unmarshal(rawBody, &savedMetrics))
-	require.Equal(t, []map[string]any{
-		{
-			"id":    "LastGC",
-			"type":  model.Gauge,
-			"value": value,
-		},
-		{
-			"id":    "NumGC",
-			"type":  model.Counter,
-			"delta": float64(delta),
-		},
-	}, savedMetrics)
-}
+			rawBody, err := os.ReadFile(path)
+			require.NoError(t, err)
 
-func TestFileStorageCreatesParentDirectoriesOnSave(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nested", "dir", "metrics.json")
-	fileStorage := storage.NewFileStorage(path, testLogger)
+			var savedMetrics []map[string]any
+			require.NoError(t, json.Unmarshal(rawBody, &savedMetrics))
+			assert.Equal(t, []map[string]any{
+				{"id": "LastGC", "type": model.Gauge, "value": value},
+				{"id": "NumGC", "type": model.Counter, "delta": float64(delta)},
+			}, savedMetrics)
+		})
 
-	require.NoError(t, fileStorage.Save(nil))
-	require.FileExists(t, path)
-}
+		t.Run("Должен создать parent directories", func(t *testing.T) {
+			path = filepath.Join(t.TempDir(), "nested", "dir", "metrics.json")
+			fileStorage = storage.NewFileStorage(path, testLogger)
 
-func TestNewRestoredFileStorageReturnsEmptyMetricsWhenFileDoesNotExist(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "missing.json")
+			require.NoError(t, fileStorage.Save(nil))
 
-	_, metrics, err := storage.NewRestoredFileStorage(path, testLogger)
+			assert.FileExists(t, path)
+		})
+	})
 
-	require.NoError(t, err)
-	require.Empty(t, metrics)
-}
+	t.Run("Тест восстановления", func(t *testing.T) {
+		t.Run("Должен вернуть пустые метрики если файл не существует", func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "missing.json")
 
-func TestNewRestoredFileStorageReturnsErrorForInvalidJSON(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "metrics.json")
-	require.NoError(t, os.WriteFile(path, []byte("not json"), 0o600))
+			_, metrics, err := storage.NewRestoredFileStorage(path, testLogger)
 
-	_, _, err := storage.NewRestoredFileStorage(path, testLogger)
+			require.NoError(t, err)
+			assert.Empty(t, metrics)
+		})
 
-	require.Error(t, err)
+		t.Run("Должен вернуть ошибку если JSON невалидный", func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "metrics.json")
+			require.NoError(t, os.WriteFile(path, []byte("not json"), 0o600))
+
+			_, _, err := storage.NewRestoredFileStorage(path, testLogger)
+
+			require.Error(t, err)
+		})
+	})
 }

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"j30att/observer/internal/agent/model"
@@ -57,10 +58,20 @@ func (a *Agent) Report(ctx context.Context) error {
 }
 
 func (a *Agent) Run(ctx context.Context) error {
-	go a.runPollLoop(ctx)
-	go a.runReportLoop(ctx)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		a.runPollLoop(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		a.runReportLoop(ctx)
+	}()
 
 	<-ctx.Done()
+	wg.Wait()
 	return ctx.Err()
 }
 
@@ -76,7 +87,9 @@ func (a *Agent) runPollLoop(ctx context.Context) {
 			log.Printf("poll metrics: %v", err)
 		}
 
-		time.Sleep(a.pollInterval)
+		if !sleepOrDone(ctx, a.pollInterval) {
+			return
+		}
 	}
 }
 
@@ -92,6 +105,25 @@ func (a *Agent) runReportLoop(ctx context.Context) {
 			log.Printf("report metrics: %v", err)
 		}
 
-		time.Sleep(a.reportInterval)
+		if !sleepOrDone(ctx, a.reportInterval) {
+			return
+		}
+	}
+}
+
+func sleepOrDone(ctx context.Context, duration time.Duration) bool {
+	if duration <= 0 {
+		<-ctx.Done()
+		return false
+	}
+
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }

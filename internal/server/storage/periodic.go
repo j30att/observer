@@ -9,7 +9,7 @@ import (
 )
 
 type MetricsLister interface {
-	List() []model.Metrics
+	List(ctx context.Context) []model.Metrics
 }
 
 type MetricsSaver interface {
@@ -32,8 +32,8 @@ func NewPeriodicSaver(interval time.Duration, source MetricsLister, target Metri
 	}
 }
 
-func (s *PeriodicSaver) Save() error {
-	return s.target.Save(s.source.List())
+func (s *PeriodicSaver) Save(ctx context.Context) error {
+	return s.target.Save(s.source.List(ctx))
 }
 
 func (s *PeriodicSaver) Run(ctx context.Context) {
@@ -49,7 +49,7 @@ func (s *PeriodicSaver) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := s.Save(); err != nil {
+			if err := s.Save(ctx); err != nil {
 				s.logger.Error().Err(err).Msg("failed to save metrics")
 			}
 		}

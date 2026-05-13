@@ -9,113 +9,162 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	agentmodel "j30att/observer/internal/agent/model"
 )
 
-func TestHTTPSenderSendsGaugeAndCounterMetrics(t *testing.T) {
-	var requests []agentmodel.Metrics
+func TestHTTPSender(t *testing.T) {
+	t.Run("Тест метода Send", func(t *testing.T) {
+		t.Run("Должен отправить gauge и counter метрики", func(t *testing.T) {
+			var request []agentmodel.Metrics
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodPost, r.Method)
+				assert.Equal(t, "/updates", r.URL.Path)
+				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+				assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+				assert.Equal(t, "gzip", r.Header.Get("Accept-Encoding"))
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/update", r.URL.Path)
-		require.Equal(t, "application/json", r.Header.Get("Content-Type"))
-		require.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
-		require.Equal(t, "gzip", r.Header.Get("Accept-Encoding"))
+				body := readGzipBody(t, r.Body)
+				require.NoError(t, json.Unmarshal(body, &request))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
 
-		body := readGzipBody(t, r.Body)
+			sender := NewHTTPSender(server.URL)
+			snapshot := agentmodel.NewMetricsSnapshot()
+			snapshot.Gauges["Alloc"] = 12.5
+			snapshot.Counters["PollCount"] = 7
 
-		var metric agentmodel.Metrics
-		require.NoError(t, json.Unmarshal(body, &metric))
-		requests = append(requests, metric)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
+			err := sender.Send(context.Background(), snapshot)
 
-	sender := NewHTTPSender(server.URL)
-	snapshot := agentmodel.NewMetricsSnapshot()
-	snapshot.Gauges["Alloc"] = 12.5
-	snapshot.Counters["PollCount"] = 7
+			require.NoError(t, err)
+			require.Len(t, request, 2)
+			assert.ElementsMatch(t, []string{"Alloc", "PollCount"}, []string{request[0].ID, request[1].ID})
+			for _, metric := range request {
+				switch metric.ID {
+				case "Alloc":
+					assert.Equal(t, agentmodel.GaugeMetricType, metric.MType)
+					require.NotNil(t, metric.Value)
+					assert.Equal(t, 12.5, *metric.Value)
+				case "PollCount":
+					assert.Equal(t, agentmodel.CounterMetricType, metric.MType)
+					require.NotNil(t, metric.Delta)
+					assert.EqualValues(t, 7, *metric.Delta)
+				default:
+					t.Fatalf("unexpected metric id: %s", metric.ID)
+				}
+			}
+		})
 
-	err := sender.Send(context.Background(), snapshot)
-	require.NoError(t, err)
-	require.Len(t, requests, 2)
+		t.Run("Должен вернуть ошибку если server вернул неожиданный status", func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+			}))
+			defer server.Close()
 
-	require.ElementsMatch(t, []string{"Alloc", "PollCount"}, []string{requests[0].ID, requests[1].ID})
-	for _, metric := range requests {
-		switch metric.ID {
-		case "Alloc":
-			require.Equal(t, agentmodel.GaugeMetricType, metric.MType)
-			require.NotNil(t, metric.Value)
-			require.Equal(t, 12.5, *metric.Value)
-		case "PollCount":
-			require.Equal(t, agentmodel.CounterMetricType, metric.MType)
-			require.NotNil(t, metric.Delta)
-			require.EqualValues(t, 7, *metric.Delta)
-		default:
-			t.Fatalf("unexpected metric id: %s", metric.ID)
-		}
-	}
-}
+			sender := NewHTTPSender(server.URL)
+			snapshot := agentmodel.NewMetricsSnapshot()
+			snapshot.Gauges["Alloc"] = 12.5
 
-func TestHTTPSenderReturnsErrorWhenServerRespondsWithUnexpectedStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-	}))
-	defer server.Close()
+			err := sender.Send(context.Background(), snapshot)
 
-	sender := NewHTTPSender(server.URL)
-	snapshot := agentmodel.NewMetricsSnapshot()
-	snapshot.Gauges["Alloc"] = 12.5
+			require.Error(t, err)
+		})
 
-	err := sender.Send(context.Background(), snapshot)
-	require.Error(t, err)
-}
+		t.Run("Должен вернуть ошибку если server вернул неожиданный content type", func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
 
-func TestHTTPSenderReturnsErrorWhenServerRespondsWithUnexpectedContentType(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
+			sender := NewHTTPSender(server.URL)
+			snapshot := agentmodel.NewMetricsSnapshot()
+			snapshot.Gauges["Alloc"] = 12.5
 
-	sender := NewHTTPSender(server.URL)
-	snapshot := agentmodel.NewMetricsSnapshot()
-	snapshot.Gauges["Alloc"] = 12.5
+			err := sender.Send(context.Background(), snapshot)
 
-	err := sender.Send(context.Background(), snapshot)
-	require.Error(t, err)
-}
+			require.Error(t, err)
+		})
 
-func TestHTTPSenderAddsHTTPSchemeWhenAddressDoesNotContainIt(t *testing.T) {
-	var requestedPath string
+		t.Run("Должен добавить http scheme если address без scheme", func(t *testing.T) {
+			var requestedPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestedPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestedPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
+			address := strings.TrimPrefix(server.URL, "http://")
+			sender := NewHTTPSender(address)
+			snapshot := agentmodel.NewMetricsSnapshot()
+			snapshot.Counters["PollCount"] = 1
 
-	address := strings.TrimPrefix(server.URL, "http://")
-	sender := NewHTTPSender(address)
-	snapshot := agentmodel.NewMetricsSnapshot()
-	snapshot.Counters["PollCount"] = 1
+			err := sender.Send(context.Background(), snapshot)
 
-	err := sender.Send(context.Background(), snapshot)
-	require.NoError(t, err)
-	require.Equal(t, "/update", requestedPath)
-}
+			require.NoError(t, err)
+			assert.Equal(t, "/updates", requestedPath)
+		})
 
-func TestParseBaseURLTreatsLocalhostAddressAsHost(t *testing.T) {
-	baseURL := parseBaseURL("localhost:8080")
+		t.Run("Должен повторить отправку если соединение временно недоступно", func(t *testing.T) {
+			requestsCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requestsCount++
+				if requestsCount == 1 {
+					conn, _, err := w.(http.Hijacker).Hijack()
+					require.NoError(t, err)
+					_ = conn.Close()
+					return
+				}
 
-	require.Equal(t, "http", baseURL.Scheme)
-	require.Equal(t, "localhost:8080", baseURL.Host)
-	require.Empty(t, baseURL.Path)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			sender := NewHTTPSender(server.URL)
+			sender.retryDelays = []time.Duration{0, 0, 0}
+			snapshot := agentmodel.NewMetricsSnapshot()
+			snapshot.Gauges["Alloc"] = 12.5
+
+			err := sender.Send(context.Background(), snapshot)
+
+			require.NoError(t, err)
+			assert.Equal(t, 2, requestsCount)
+		})
+
+		t.Run("Не должен отправлять пустой batch", func(t *testing.T) {
+			requestsCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requestsCount++
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			sender := NewHTTPSender(server.URL)
+
+			err := sender.Send(context.Background(), agentmodel.NewMetricsSnapshot())
+
+			require.NoError(t, err)
+			assert.Zero(t, requestsCount)
+		})
+	})
+
+	t.Run("Тест parseBaseURL", func(t *testing.T) {
+		t.Run("Должен считать localhost address как host", func(t *testing.T) {
+			baseURL := parseBaseURL("localhost:8080")
+
+			assert.Equal(t, "http", baseURL.Scheme)
+			assert.Equal(t, "localhost:8080", baseURL.Host)
+			assert.Empty(t, baseURL.Path)
+		})
+	})
 }
 
 func readGzipBody(t *testing.T, body io.ReadCloser) []byte {

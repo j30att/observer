@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	stdlog "log"
 	"net/http"
 	"os"
 	"time"
 
+	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/server/controller"
@@ -17,6 +19,7 @@ import (
 	"j30att/observer/internal/server/repository"
 	"j30att/observer/internal/server/router"
 	"j30att/observer/internal/server/storage"
+	"j30att/observer/migrations"
 )
 
 func main() {
@@ -27,37 +30,62 @@ func main() {
 
 	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
 
-	repo := repository.NewMetricsRepository()
-	var fileStorage *storage.FileStorage
-	if cfg.Restore {
-		var metrics []model.Metrics
-		fileStorage, metrics, err = storage.NewRestoredFileStorage(cfg.FileStoragePath, logger)
+	var db *sql.DB
+	if cfg.DatabaseDSN != "" {
+		db, err = sql.Open("postgres", cfg.DatabaseDSN)
 		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to restore metrics from file")
+			logger.Fatal().Err(err).Msg("failed to open database")
 		}
+		defer db.Close()
 
-		if err := repo.Restore(metrics); err != nil {
-			logger.Fatal().Err(err).Msg("failed to restore metrics repository")
+		pingCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		err = db.PingContext(pingCtx)
+		cancel()
+		if err != nil {
+			logger.Error().Err(err).Msg("database is unavailable")
+		} else if err := migrations.Up(db); err != nil {
+			logger.Fatal().Err(err).Msg("failed to apply database migrations")
 		}
-
-		logger.Info().Int("metrics_count", len(metrics)).Msg("restored metrics")
-	} else {
-		fileStorage = storage.NewFileStorage(cfg.FileStoragePath, logger)
 	}
 
-	var metricsRepo repository.MetricsRepository = repo
-	if cfg.StoreInterval > 0 {
-		periodicSaver := storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, logger)
-		go periodicSaver.Run(context.Background())
+	var metricsRepo repository.MetricsRepository
+	if db != nil {
+		metricsRepo = repository.NewPostgresMetricsRepository(db)
+	} else if cfg.FileStoragePath != "" {
+		repo := repository.NewMetricsRepository()
+		var fileStorage *storage.FileStorage
+		if cfg.Restore {
+			var metrics []model.Metrics
+			fileStorage, metrics, err = storage.NewRestoredFileStorage(cfg.FileStoragePath, logger)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("failed to restore metrics from file")
+			}
+
+			if err := repo.Restore(metrics); err != nil {
+				logger.Fatal().Err(err).Msg("failed to restore metrics repository")
+			}
+
+			logger.Info().Int("metrics_count", len(metrics)).Msg("restored metrics")
+		} else {
+			fileStorage = storage.NewFileStorage(cfg.FileStoragePath, logger)
+		}
+
+		metricsRepo = repo
+		if cfg.StoreInterval > 0 {
+			periodicSaver := storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, logger)
+			go periodicSaver.Run(context.Background())
+		} else {
+			metricsRepo = repository.NewSyncPersistentRepository(repo, fileStorage)
+		}
 	} else {
-		metricsRepo = repository.NewSyncPersistentRepository(repo, fileStorage)
+		metricsRepo = repository.NewMetricsRepository()
 	}
 
 	updateMetricCommand := update.New(metricsRepo)
 	getMetricQuery := get.New(metricsRepo)
 	listMetricsQuery := getlist.New(metricsRepo)
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
-	r := router.NewRouter(metricController, logger)
+	r := router.NewRouter(metricController, logger, db)
 
 	server := &http.Server{
 		Addr:              cfg.Address,

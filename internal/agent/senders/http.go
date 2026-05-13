@@ -4,24 +4,30 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	agentmodel "j30att/observer/internal/agent/model"
 	"j30att/observer/internal/compression"
+	"j30att/observer/internal/retry"
 )
 
 type HTTPSender struct {
-	baseURL *url.URL
-	client  *http.Client
+	baseURL     *url.URL
+	client      *http.Client
+	retryDelays []time.Duration
 }
 
 func NewHTTPSender(address string) *HTTPSender {
 	return &HTTPSender{
-		baseURL: parseBaseURL(address),
-		client:  &http.Client{},
+		baseURL:     parseBaseURL(address),
+		client:      &http.Client{},
+		retryDelays: retry.DefaultDelays,
 	}
 }
 
@@ -47,57 +53,61 @@ func parseBaseURL(address string) *url.URL {
 }
 
 func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapshot) error {
+	metrics := make([]agentmodel.Metrics, 0, len(snapshot.Gauges)+len(snapshot.Counters))
 	for name, value := range snapshot.Gauges {
-		metric := agentmodel.Metrics{
+		metrics = append(metrics, agentmodel.Metrics{
 			ID:    name,
 			MType: agentmodel.GaugeMetricType,
 			Value: &value,
-		}
-		if err := s.sendMetric(ctx, metric); err != nil {
-			return fmt.Errorf("send gauge metric %q: %w", name, err)
-		}
+		})
 	}
 
 	for name, value := range snapshot.Counters {
-		metric := agentmodel.Metrics{
+		metrics = append(metrics, agentmodel.Metrics{
 			ID:    name,
 			MType: agentmodel.CounterMetricType,
 			Delta: &value,
-		}
-		if err := s.sendMetric(ctx, metric); err != nil {
-			return fmt.Errorf("send counter metric %q: %w", name, err)
-		}
+		})
 	}
 
-	return nil
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	return s.sendMetrics(ctx, metrics)
 }
 
-func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) error {
-	body, err := json.Marshal(metric)
+func (s *HTTPSender) sendMetrics(ctx context.Context, metrics []agentmodel.Metrics) error {
+	body, err := json.Marshal(metrics)
 	if err != nil {
-		return fmt.Errorf("marshal metric: %w", err)
+		return fmt.Errorf("marshal metrics: %w", err)
 	}
 
 	body, err = compression.CompressGzip(body)
 	if err != nil {
-		return fmt.Errorf("compress metric body: %w", err)
+		return fmt.Errorf("compress metrics body: %w", err)
 	}
 
 	metricURL := *s.baseURL
-	metricURL.Path = strings.TrimRight(metricURL.Path, "/") + "/update"
+	metricURL.Path = strings.TrimRight(metricURL.Path, "/") + "/updates"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricURL.String(), bytes.NewReader(body))
+	return retry.Do(ctx, s.retryDelays, isRetriableTransportError, func() error {
+		return s.doSendMetrics(ctx, metricURL.String(), body)
+	})
+}
+
+func (s *HTTPSender) doSendMetrics(ctx context.Context, metricURL string, body []byte) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricURL, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("create metric update request: %w", err)
+		return fmt.Errorf("create metrics update request: %w", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", compression.GzipEncoding)
 	req.Header.Set("Accept-Encoding", compression.GzipEncoding)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send metric update request: %w", err)
+		return fmt.Errorf("send metrics update request: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -112,4 +122,18 @@ func (s *HTTPSender) sendMetric(ctx context.Context, metric agentmodel.Metrics) 
 	}
 
 	return nil
+}
+
+func isRetriableTransportError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
+
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
