@@ -18,9 +18,12 @@ func main() {
 		log.Fatal(err)
 	}
 	store := repository.NewMetricsRepository()
-	collector := collectors.NewRuntimeCollector()
+	metricCollectors := []agent.Collector{
+		collectors.NewRuntimeCollector(),
+		collectors.NewGopsutilCollector(),
+	}
 	sender := senders.NewHTTPSender(cfg.ServerAddress, cfg.Key)
-	app := agent.New(cfg, store, collector, sender)
+	app := agent.New(cfg, store, metricCollectors, sender)
 
 	if err := app.Run(context.Background()); err != nil {
 		log.Fatal(err)

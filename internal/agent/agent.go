@@ -21,19 +21,33 @@ type Sender interface {
 
 type Agent struct {
 	store          *repository.MetricsRepository
-	collector      Collector
+	collectors     []Collector
 	sender         Sender
 	pollInterval   time.Duration
 	reportInterval time.Duration
+	rateLimit      int
 }
 
-func New(cfg config.AgentConfig, store *repository.MetricsRepository, collector Collector, sender Sender) *Agent {
+func New(cfg config.AgentConfig, store *repository.MetricsRepository, collectors []Collector, sender Sender) *Agent {
+	activeCollectors := make([]Collector, 0, len(collectors))
+	for _, collector := range collectors {
+		if collector != nil {
+			activeCollectors = append(activeCollectors, collector)
+		}
+	}
+
+	rateLimit := cfg.RateLimit
+	if rateLimit <= 0 {
+		rateLimit = 1
+	}
+
 	return &Agent{
 		store:          store,
-		collector:      collector,
+		collectors:     activeCollectors,
 		sender:         sender,
 		pollInterval:   cfg.PollInterval,
 		reportInterval: cfg.ReportInterval,
+		rateLimit:      rateLimit,
 	}
 }
 
@@ -45,12 +59,22 @@ func (a *Agent) ReportInterval() time.Duration {
 	return a.reportInterval
 }
 
+func (a *Agent) RateLimit() int {
+	return a.rateLimit
+}
+
 func (a *Agent) Store() *repository.MetricsRepository {
 	return a.store
 }
 
 func (a *Agent) Poll() error {
-	return a.collector.Collect(a.store)
+	for _, collector := range a.collectors {
+		if err := collector.Collect(a.store); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (a *Agent) Report(ctx context.Context) error {
@@ -59,23 +83,37 @@ func (a *Agent) Report(ctx context.Context) error {
 
 func (a *Agent) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
-	wg.Add(2)
+	reports := make(chan model.MetricsSnapshot, a.rateLimit)
 
+	for _, collector := range a.collectors {
+		wg.Add(1)
+		go func(collector Collector) {
+			defer wg.Done()
+			a.runPollLoop(ctx, collector)
+		}(collector)
+	}
+
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		a.runPollLoop(ctx)
+		defer close(reports)
+		a.runReportLoop(ctx, reports)
 	}()
-	go func() {
-		defer wg.Done()
-		a.runReportLoop(ctx)
-	}()
+
+	for workerID := 0; workerID < a.rateLimit; workerID++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a.runReportWorker(ctx, reports)
+		}()
+	}
 
 	<-ctx.Done()
 	wg.Wait()
 	return ctx.Err()
 }
 
-func (a *Agent) runPollLoop(ctx context.Context) {
+func (a *Agent) runPollLoop(ctx context.Context, collector Collector) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -83,7 +121,7 @@ func (a *Agent) runPollLoop(ctx context.Context) {
 		default:
 		}
 
-		if err := a.Poll(); err != nil {
+		if err := collector.Collect(a.store); err != nil {
 			log.Printf("poll metrics: %v", err)
 		}
 
@@ -93,7 +131,7 @@ func (a *Agent) runPollLoop(ctx context.Context) {
 	}
 }
 
-func (a *Agent) runReportLoop(ctx context.Context) {
+func (a *Agent) runReportLoop(ctx context.Context, reports chan<- model.MetricsSnapshot) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -101,12 +139,30 @@ func (a *Agent) runReportLoop(ctx context.Context) {
 		default:
 		}
 
-		if err := a.Report(ctx); err != nil {
-			log.Printf("report metrics: %v", err)
+		select {
+		case reports <- a.store.Snapshot():
+		case <-ctx.Done():
+			return
 		}
 
 		if !sleepOrDone(ctx, a.reportInterval) {
 			return
+		}
+	}
+}
+
+func (a *Agent) runReportWorker(ctx context.Context, reports <-chan model.MetricsSnapshot) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case snapshot, ok := <-reports:
+			if !ok {
+				return
+			}
+			if err := a.sender.Send(ctx, snapshot); err != nil {
+				log.Printf("report metrics: %v", err)
+			}
 		}
 	}
 }

@@ -14,6 +14,7 @@ type AgentConfig struct {
 	PollInterval   time.Duration
 	ReportInterval time.Duration
 	Key            string
+	RateLimit      int
 }
 
 func NewAgentConfig() AgentConfig {
@@ -21,6 +22,7 @@ func NewAgentConfig() AgentConfig {
 		ServerAddress:  "localhost:8080",
 		PollInterval:   2 * time.Second,
 		ReportInterval: 10 * time.Second,
+		RateLimit:      1,
 	}
 }
 
@@ -35,6 +37,7 @@ func ParseAgentConfig(args []string) (AgentConfig, error) {
 	fs.IntVar(&reportSeconds, "r", int(cfg.ReportInterval/time.Second), "report interval in seconds")
 	fs.IntVar(&pollSeconds, "p", int(cfg.PollInterval/time.Second), "poll interval in seconds")
 	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
+	fs.IntVar(&cfg.RateLimit, "l", cfg.RateLimit, "maximum number of concurrent outgoing requests")
 
 	if err := fs.Parse(args); err != nil {
 		return AgentConfig{}, err
@@ -52,6 +55,12 @@ func ParseAgentConfig(args []string) (AgentConfig, error) {
 		pollSeconds = value
 	}
 
+	if value, ok, err := lookupEnvInt("RATE_LIMIT"); err != nil {
+		return AgentConfig{}, fmt.Errorf("invalid RATE_LIMIT value: %w", err)
+	} else if ok {
+		cfg.RateLimit = value
+	}
+
 	if value, ok := os.LookupEnv("ADDRESS"); ok {
 		cfg.ServerAddress = value
 	}
@@ -66,6 +75,10 @@ func ParseAgentConfig(args []string) (AgentConfig, error) {
 
 	if pollSeconds < 0 {
 		return AgentConfig{}, fmt.Errorf("invalid poll interval value %d: interval must be non-negative seconds", pollSeconds)
+	}
+
+	if cfg.RateLimit <= 0 {
+		return AgentConfig{}, fmt.Errorf("invalid rate limit value %d: value must be positive", cfg.RateLimit)
 	}
 
 	cfg.ReportInterval = time.Duration(reportSeconds) * time.Second

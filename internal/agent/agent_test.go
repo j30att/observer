@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -9,11 +10,39 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/agent"
+	"j30att/observer/internal/agent/collectors"
 	agentmocks "j30att/observer/internal/agent/mocks"
 	agentmodel "j30att/observer/internal/agent/model"
 	"j30att/observer/internal/agent/repository"
 	"j30att/observer/internal/config"
 )
+
+type trackingSender struct {
+	active    int64
+	maxActive int64
+	calls     int64
+	delay     time.Duration
+}
+
+func (s *trackingSender) Send(ctx context.Context, _ agentmodel.MetricsSnapshot) error {
+	active := atomic.AddInt64(&s.active, 1)
+	defer atomic.AddInt64(&s.active, -1)
+	atomic.AddInt64(&s.calls, 1)
+
+	for {
+		maxActive := atomic.LoadInt64(&s.maxActive)
+		if active <= maxActive || atomic.CompareAndSwapInt64(&s.maxActive, maxActive, active) {
+			break
+		}
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(s.delay):
+		return nil
+	}
+}
 
 func TestAgent(t *testing.T) {
 	var (
@@ -29,7 +58,7 @@ func TestAgent(t *testing.T) {
 		store = repository.NewMetricsRepository()
 		collector = agentmocks.NewMockCollector(t)
 		sender = agentmocks.NewMockSender(t)
-		app = agent.New(cfg, store, collector, sender)
+		app = agent.New(cfg, store, []agent.Collector{collector}, sender)
 	}
 
 	t.Run("Тест метода Poll", func(t *testing.T) {
@@ -87,6 +116,25 @@ func TestAgent(t *testing.T) {
 			require.ErrorIs(t, err, context.DeadlineExceeded)
 			assert.GreaterOrEqual(t, len(collector.Calls), 1)
 			assert.GreaterOrEqual(t, len(sender.Calls), 1)
+		})
+
+		t.Run("Должен ограничивать количество одновременных отправок", func(t *testing.T) {
+			store := repository.NewMetricsRepository()
+			tracker := &trackingSender{delay: 30 * time.Millisecond}
+			app := agent.New(config.AgentConfig{
+				PollInterval:   time.Hour,
+				ReportInterval: time.Millisecond,
+				RateLimit:      2,
+			}, store, []agent.Collector{collectors.NoopCollector{}}, tracker)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+			defer cancel()
+
+			err := app.Run(ctx)
+
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			assert.LessOrEqual(t, atomic.LoadInt64(&tracker.maxActive), int64(2))
+			assert.GreaterOrEqual(t, atomic.LoadInt64(&tracker.calls), int64(2))
 		})
 	})
 }
