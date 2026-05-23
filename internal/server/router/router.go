@@ -20,7 +20,9 @@ func NewRouter(metricController *controller.MetricController, logger zerolog.Log
 	r := chi.NewRouter()
 	r.Use(chimiddleware.StripSlashes)
 	r.Use(middlewares.Logger(logger))
-	r.Use(middlewares.Signature(signatureKey))
+	if signatureKey != "" {
+		r.Use(middlewares.Signature(signatureKey))
+	}
 	r.Use(middlewares.Gzip)
 	pingHandler := ping.New(db)
 	r.Get("/ping", pingHandler.Ping)

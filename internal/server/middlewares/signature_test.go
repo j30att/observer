@@ -13,22 +13,6 @@ import (
 )
 
 func TestSignature(t *testing.T) {
-	t.Run("Пропускает запрос если ключ не задан", func(t *testing.T) {
-		handler := Signature("")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
-			assert.Equal(t, []byte("payload"), body)
-			w.WriteHeader(http.StatusOK)
-		}))
-
-		req := httptest.NewRequest(http.MethodPost, "/updates", bytes.NewBufferString("payload"))
-		rec := httptest.NewRecorder()
-
-		handler.ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusOK, rec.Code)
-	})
-
 	t.Run("Пропускает запрос с корректной подписью и восстанавливает body", func(t *testing.T) {
 		handler := Signature("secret-key")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -58,7 +59,7 @@ func TestAgent(t *testing.T) {
 		store = repository.NewMetricsRepository()
 		collector = agentmocks.NewMockCollector(t)
 		sender = agentmocks.NewMockSender(t)
-		app = agent.New(cfg, store, []agent.Collector{collector}, sender)
+		app = agent.New(cfg, store, []agent.Collector{collector}, sender, zerolog.Nop())
 	}
 
 	t.Run("Тест метода Poll", func(t *testing.T) {
@@ -98,10 +99,10 @@ func TestAgent(t *testing.T) {
 
 	t.Run("Тест метода Run", func(t *testing.T) {
 		t.Run("Должен собирать и отправлять метрики пока контекст не отменён", func(t *testing.T) {
-			setup(t, config.AgentConfig{
-				PollInterval:   10 * time.Millisecond,
-				ReportInterval: 15 * time.Millisecond,
-			})
+			cfg := config.NewAgentConfig()
+			cfg.PollInterval = 10 * time.Millisecond
+			cfg.ReportInterval = 15 * time.Millisecond
+			setup(t, cfg)
 
 			collector.EXPECT().Collect(store).Return(nil).Maybe()
 			sender.EXPECT().Send(mock.Anything, mock.MatchedBy(func(agentmodel.MetricsSnapshot) bool {
@@ -125,7 +126,7 @@ func TestAgent(t *testing.T) {
 				PollInterval:   time.Hour,
 				ReportInterval: time.Millisecond,
 				RateLimit:      2,
-			}, store, []agent.Collector{collectors.NoopCollector{}}, tracker)
+			}, store, []agent.Collector{collectors.NoopCollector{}}, tracker, zerolog.Nop())
 
 			ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
 			defer cancel()

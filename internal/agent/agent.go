@@ -2,10 +2,10 @@ package agent
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog"
 	"j30att/observer/internal/agent/model"
 	"j30att/observer/internal/agent/repository"
 	"j30att/observer/internal/config"
@@ -26,19 +26,15 @@ type Agent struct {
 	pollInterval   time.Duration
 	reportInterval time.Duration
 	rateLimit      int
+	logger         zerolog.Logger
 }
 
-func New(cfg config.AgentConfig, store *repository.MetricsRepository, collectors []Collector, sender Sender) *Agent {
+func New(cfg config.AgentConfig, store *repository.MetricsRepository, collectors []Collector, sender Sender, logger zerolog.Logger) *Agent {
 	activeCollectors := make([]Collector, 0, len(collectors))
 	for _, collector := range collectors {
 		if collector != nil {
 			activeCollectors = append(activeCollectors, collector)
 		}
-	}
-
-	rateLimit := cfg.RateLimit
-	if rateLimit <= 0 {
-		rateLimit = 1
 	}
 
 	return &Agent{
@@ -47,7 +43,8 @@ func New(cfg config.AgentConfig, store *repository.MetricsRepository, collectors
 		sender:         sender,
 		pollInterval:   cfg.PollInterval,
 		reportInterval: cfg.ReportInterval,
-		rateLimit:      rateLimit,
+		rateLimit:      cfg.RateLimit,
+		logger:         logger,
 	}
 }
 
@@ -100,7 +97,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.runReportLoop(ctx, reports)
 	}()
 
-	for workerID := 0; workerID < a.rateLimit; workerID++ {
+	for range a.rateLimit {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -122,7 +119,7 @@ func (a *Agent) runPollLoop(ctx context.Context, collector Collector) {
 		}
 
 		if err := collector.Collect(a.store); err != nil {
-			log.Printf("poll metrics: %v", err)
+			a.logger.Error().Err(err).Msg("failed to poll metrics")
 		}
 
 		if !sleepOrDone(ctx, a.pollInterval) {
@@ -161,7 +158,7 @@ func (a *Agent) runReportWorker(ctx context.Context, reports <-chan model.Metric
 				return
 			}
 			if err := a.sender.Send(ctx, snapshot); err != nil {
-				log.Printf("report metrics: %v", err)
+				a.logger.Error().Err(err).Msg("failed to report metrics")
 			}
 		}
 	}

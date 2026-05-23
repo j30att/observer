@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 
+	"github.com/rs/zerolog"
 	"j30att/observer/internal/agent"
 	"j30att/observer/internal/agent/collectors"
 	"j30att/observer/internal/agent/repository"
@@ -13,9 +13,11 @@ import (
 )
 
 func main() {
+	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
+
 	cfg, err := config.ParseAgentConfig(os.Args[1:])
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal().Err(err).Msg("failed to parse agent config")
 	}
 	store := repository.NewMetricsRepository()
 	metricCollectors := []agent.Collector{
@@ -23,9 +25,9 @@ func main() {
 		collectors.NewGopsutilCollector(),
 	}
 	sender := senders.NewHTTPSender(cfg.ServerAddress, cfg.Key)
-	app := agent.New(cfg, store, metricCollectors, sender)
+	app := agent.New(cfg, store, metricCollectors, sender, logger)
 
 	if err := app.Run(context.Background()); err != nil {
-		log.Fatal(err)
+		logger.Fatal().Err(err).Msg("agent stopped")
 	}
 }
