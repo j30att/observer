@@ -18,6 +18,7 @@ func TestAgentConfig(t *testing.T) {
 			assert.Equal(t, 2*time.Second, cfg.PollInterval)
 			assert.Equal(t, 10*time.Second, cfg.ReportInterval)
 			assert.Empty(t, cfg.Key)
+			assert.Equal(t, 1, cfg.RateLimit)
 		})
 	})
 
@@ -30,16 +31,18 @@ func TestAgentConfig(t *testing.T) {
 			assert.Equal(t, 2*time.Second, cfg.PollInterval)
 			assert.Equal(t, 10*time.Second, cfg.ReportInterval)
 			assert.Empty(t, cfg.Key)
+			assert.Equal(t, 1, cfg.RateLimit)
 		})
 
 		t.Run("Должен переопределить values из flags", func(t *testing.T) {
-			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5", "-k=flag-key"})
+			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5", "-k=flag-key", "-l=4"})
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9000", cfg.ServerAddress)
 			assert.Equal(t, 5*time.Second, cfg.PollInterval)
 			assert.Equal(t, 15*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "flag-key", cfg.Key)
+			assert.Equal(t, 4, cfg.RateLimit)
 		})
 
 		t.Run("Должен переопределить values из environment", func(t *testing.T) {
@@ -47,6 +50,7 @@ func TestAgentConfig(t *testing.T) {
 			t.Setenv("REPORT_INTERVAL", "20")
 			t.Setenv("POLL_INTERVAL", "7")
 			t.Setenv("KEY", "env-key")
+			t.Setenv("RATE_LIMIT", "5")
 
 			cfg, err := config.ParseAgentConfig(nil)
 
@@ -55,6 +59,7 @@ func TestAgentConfig(t *testing.T) {
 			assert.Equal(t, 7*time.Second, cfg.PollInterval)
 			assert.Equal(t, 20*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "env-key", cfg.Key)
+			assert.Equal(t, 5, cfg.RateLimit)
 		})
 
 		t.Run("Должен отдать приоритет environment над flags", func(t *testing.T) {
@@ -62,14 +67,16 @@ func TestAgentConfig(t *testing.T) {
 			t.Setenv("REPORT_INTERVAL", "20")
 			t.Setenv("POLL_INTERVAL", "7")
 			t.Setenv("KEY", "env-key")
+			t.Setenv("RATE_LIMIT", "5")
 
-			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5", "-k=flag-key"})
+			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5", "-k=flag-key", "-l=4"})
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.ServerAddress)
 			assert.Equal(t, 7*time.Second, cfg.PollInterval)
 			assert.Equal(t, 20*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "env-key", cfg.Key)
+			assert.Equal(t, 5, cfg.RateLimit)
 		})
 
 		t.Run("Ошибка, неизвестный flag", func(t *testing.T) {
@@ -90,6 +97,12 @@ func TestAgentConfig(t *testing.T) {
 			require.EqualError(t, err, "invalid poll interval value -1: interval must be non-negative seconds")
 		})
 
+		t.Run("Ошибка, неположительный rate limit", func(t *testing.T) {
+			_, err := config.ParseAgentConfig([]string{"-l=0"})
+
+			require.EqualError(t, err, "invalid rate limit value 0: value must be positive")
+		})
+
 		t.Run("Ошибка, невалидный REPORT_INTERVAL", func(t *testing.T) {
 			t.Setenv("REPORT_INTERVAL", "abc")
 
@@ -104,6 +117,14 @@ func TestAgentConfig(t *testing.T) {
 			_, err := config.ParseAgentConfig(nil)
 
 			require.EqualError(t, err, "invalid poll interval value -1: interval must be non-negative seconds")
+		})
+
+		t.Run("Ошибка, невалидный RATE_LIMIT", func(t *testing.T) {
+			t.Setenv("RATE_LIMIT", "abc")
+
+			_, err := config.ParseAgentConfig(nil)
+
+			require.EqualError(t, err, "invalid RATE_LIMIT value: \"abc\" is not a valid integer")
 		})
 	})
 }

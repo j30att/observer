@@ -19,6 +19,7 @@ import (
 	"j30att/observer/internal/server/handlers/update"
 	"j30att/observer/internal/server/repository"
 	"j30att/observer/internal/server/router"
+	"j30att/observer/internal/signature"
 )
 
 var testLogger = zerolog.Nop()
@@ -51,6 +52,7 @@ func TestMetricController(t *testing.T) {
 			r.ServeHTTP(rec, req)
 
 			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Empty(t, rec.Header().Get(signature.Header))
 		})
 
 		t.Run("Должен вернуть сохранённую metric для JSON update", func(t *testing.T) {

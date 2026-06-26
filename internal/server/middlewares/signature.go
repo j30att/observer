@@ -45,11 +45,6 @@ func (w *signatureResponseWriter) Write(data []byte) (int, error) {
 func Signature(key string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if key == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
-
 			requestBody := r.Body
 			if requestBody == nil {
 				requestBody = http.NoBody
