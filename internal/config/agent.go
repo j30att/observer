@@ -13,6 +13,7 @@ type AgentConfig struct {
 	ServerAddress  string
 	PollInterval   time.Duration
 	ReportInterval time.Duration
+	Key            string
 }
 
 func NewAgentConfig() AgentConfig {
@@ -33,6 +34,7 @@ func ParseAgentConfig(args []string) (AgentConfig, error) {
 	fs.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "HTTP server endpoint address")
 	fs.IntVar(&reportSeconds, "r", int(cfg.ReportInterval/time.Second), "report interval in seconds")
 	fs.IntVar(&pollSeconds, "p", int(cfg.PollInterval/time.Second), "poll interval in seconds")
+	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
 
 	if err := fs.Parse(args); err != nil {
 		return AgentConfig{}, err
@@ -52,6 +54,10 @@ func ParseAgentConfig(args []string) (AgentConfig, error) {
 
 	if value, ok := os.LookupEnv("ADDRESS"); ok {
 		cfg.ServerAddress = value
+	}
+
+	if value, ok := os.LookupEnv("KEY"); ok {
+		cfg.Key = value
 	}
 
 	if reportSeconds < 0 {

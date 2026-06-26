@@ -17,6 +17,7 @@ func TestAgentConfig(t *testing.T) {
 			assert.Equal(t, "localhost:8080", cfg.ServerAddress)
 			assert.Equal(t, 2*time.Second, cfg.PollInterval)
 			assert.Equal(t, 10*time.Second, cfg.ReportInterval)
+			assert.Empty(t, cfg.Key)
 		})
 	})
 
@@ -28,21 +29,24 @@ func TestAgentConfig(t *testing.T) {
 			assert.Equal(t, "localhost:8080", cfg.ServerAddress)
 			assert.Equal(t, 2*time.Second, cfg.PollInterval)
 			assert.Equal(t, 10*time.Second, cfg.ReportInterval)
+			assert.Empty(t, cfg.Key)
 		})
 
 		t.Run("Должен переопределить values из flags", func(t *testing.T) {
-			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5"})
+			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5", "-k=flag-key"})
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9000", cfg.ServerAddress)
 			assert.Equal(t, 5*time.Second, cfg.PollInterval)
 			assert.Equal(t, 15*time.Second, cfg.ReportInterval)
+			assert.Equal(t, "flag-key", cfg.Key)
 		})
 
 		t.Run("Должен переопределить values из environment", func(t *testing.T) {
 			t.Setenv("ADDRESS", "127.0.0.1:9100")
 			t.Setenv("REPORT_INTERVAL", "20")
 			t.Setenv("POLL_INTERVAL", "7")
+			t.Setenv("KEY", "env-key")
 
 			cfg, err := config.ParseAgentConfig(nil)
 
@@ -50,19 +54,22 @@ func TestAgentConfig(t *testing.T) {
 			assert.Equal(t, "127.0.0.1:9100", cfg.ServerAddress)
 			assert.Equal(t, 7*time.Second, cfg.PollInterval)
 			assert.Equal(t, 20*time.Second, cfg.ReportInterval)
+			assert.Equal(t, "env-key", cfg.Key)
 		})
 
 		t.Run("Должен отдать приоритет environment над flags", func(t *testing.T) {
 			t.Setenv("ADDRESS", "127.0.0.1:9100")
 			t.Setenv("REPORT_INTERVAL", "20")
 			t.Setenv("POLL_INTERVAL", "7")
+			t.Setenv("KEY", "env-key")
 
-			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5"})
+			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5", "-k=flag-key"})
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.ServerAddress)
 			assert.Equal(t, 7*time.Second, cfg.PollInterval)
 			assert.Equal(t, 20*time.Second, cfg.ReportInterval)
+			assert.Equal(t, "env-key", cfg.Key)
 		})
 
 		t.Run("Ошибка, неизвестный flag", func(t *testing.T) {

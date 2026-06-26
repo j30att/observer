@@ -1,6 +1,7 @@
 package senders
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	agentmodel "j30att/observer/internal/agent/model"
+	"j30att/observer/internal/signature"
 )
 
 func TestHTTPSender(t *testing.T) {
@@ -27,14 +29,18 @@ func TestHTTPSender(t *testing.T) {
 				assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
 				assert.Equal(t, "gzip", r.Header.Get("Accept-Encoding"))
 
-				body := readGzipBody(t, r.Body)
+				rawBody, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				assert.Equal(t, signature.Sign(rawBody, "secret-key"), r.Header.Get(signature.Header))
+
+				body := readGzipBody(t, io.NopCloser(bytes.NewReader(rawBody)))
 				require.NoError(t, json.Unmarshal(body, &request))
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer server.Close()
 
-			sender := NewHTTPSender(server.URL)
+			sender := NewHTTPSender(server.URL, "secret-key")
 			snapshot := agentmodel.NewMetricsSnapshot()
 			snapshot.Gauges["Alloc"] = 12.5
 			snapshot.Counters["PollCount"] = 7
