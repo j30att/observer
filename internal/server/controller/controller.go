@@ -7,11 +7,13 @@ import (
 	"html"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"j30att/observer/internal/server/audit"
 	"j30att/observer/internal/server/handlers/get"
 	"j30att/observer/internal/server/handlers/getlist"
 	"j30att/observer/internal/server/handlers/update"
@@ -22,17 +24,25 @@ type MetricController struct {
 	updateMetricCommand *update.Handler
 	getMetricQuery      *get.Handler
 	listMetricsQuery    *getlist.Handler
+	auditor             *audit.Subject
 }
 
 func NewMetricController(
 	updateMetricCommand *update.Handler,
 	getMetricQuery *get.Handler,
 	listMetricsQuery *getlist.Handler,
+	auditors ...*audit.Subject,
 ) *MetricController {
+	var auditor *audit.Subject
+	if len(auditors) > 0 {
+		auditor = auditors[0]
+	}
+
 	return &MetricController{
 		updateMetricCommand: updateMetricCommand,
 		getMetricQuery:      getMetricQuery,
 		listMetricsQuery:    listMetricsQuery,
+		auditor:             auditor,
 	}
 }
 
@@ -52,6 +62,7 @@ func (c *MetricController) UpdateMetric(w http.ResponseWriter, r *http.Request) 
 
 	err := c.updateMetricCommand.Execute(r.Context(), metricType, name, value)
 	if err == nil {
+		c.auditRequest(r, []string{name})
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -97,6 +108,7 @@ func (c *MetricController) UpdateMetricJSON(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	c.auditRequest(r, []string{metric.ID})
 	writeJSON(w, http.StatusOK, savedMetric)
 }
 
@@ -120,6 +132,7 @@ func (c *MetricController) UpdateMetricsJSON(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	c.auditRequest(r, metricNames(metrics))
 	writeJSON(w, http.StatusOK, metrics)
 }
 
@@ -301,4 +314,30 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (c *MetricController) auditRequest(r *http.Request, metricNames []string) {
+	if c.auditor == nil {
+		return
+	}
+
+	c.auditor.Notify(r.Context(), audit.NewEvent(metricNames, requestIP(r)))
+}
+
+func metricNames(metrics []model.Metrics) []string {
+	names := make([]string, 0, len(metrics))
+	for _, metric := range metrics {
+		names = append(names, metric.ID)
+	}
+
+	return names
+}
+
+func requestIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+
+	return r.RemoteAddr
 }

@@ -8,11 +8,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"j30att/observer/internal/server/audit"
 	"j30att/observer/internal/server/controller"
 	"j30att/observer/internal/server/handlers/get"
 	"j30att/observer/internal/server/handlers/getlist"
@@ -115,6 +118,39 @@ func TestMetricController(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, counter.Delta)
 			assert.EqualValues(t, 2, *counter.Delta)
+		})
+
+		t.Run("Должен отправить audit event после успешного update", func(t *testing.T) {
+			repo = repository.NewMetricsRepository()
+			updateMetricCommand := update.New(repo)
+			getMetricQuery := get.New(repo)
+			listMetricsQuery := getlist.New(repo)
+			auditPath := filepath.Join(t.TempDir(), "audit.log")
+			auditor := audit.NewSubject(testLogger, audit.NewFileObserver(auditPath))
+			metricController := controller.NewMetricController(
+				updateMetricCommand,
+				getMetricQuery,
+				listMetricsQuery,
+				auditor,
+			)
+			r = router.NewRouter(metricController, testLogger, nil)
+
+			req := newJSONRequest(t, http.MethodPost, "/updates", []map[string]any{
+				{"id": "Alloc", "type": "gauge", "value": 12.5},
+				{"id": "PollCount", "type": "counter", "delta": 2},
+			})
+			req.RemoteAddr = "192.168.0.42:12345"
+			rec := httptest.NewRecorder()
+
+			r.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var event audit.Event
+			require.NoError(t, json.Unmarshal(readAuditLine(t, auditPath), &event))
+			assert.Positive(t, event.Timestamp)
+			assert.Equal(t, []string{"Alloc", "PollCount"}, event.Metrics)
+			assert.Equal(t, "192.168.0.42", event.IPAddress)
 		})
 
 		t.Run("Должен вернуть gzip response", func(t *testing.T) {
@@ -452,4 +488,16 @@ func readGzipBody(t *testing.T, body []byte) []byte {
 	require.NoError(t, err)
 
 	return rawBody
+}
+
+func readAuditLine(t *testing.T, path string) []byte {
+	t.Helper()
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	lines := bytes.Split(bytes.TrimSpace(body), []byte("\n"))
+	require.Len(t, lines, 1)
+
+	return lines[0]
 }

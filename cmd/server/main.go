@@ -8,9 +8,8 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/lib/pq"
-	"github.com/rs/zerolog"
 	"j30att/observer/internal/config"
+	"j30att/observer/internal/server/audit"
 	"j30att/observer/internal/server/controller"
 	"j30att/observer/internal/server/handlers/get"
 	"j30att/observer/internal/server/handlers/getlist"
@@ -20,6 +19,9 @@ import (
 	"j30att/observer/internal/server/router"
 	"j30att/observer/internal/server/storage"
 	"j30att/observer/migrations"
+
+	_ "github.com/lib/pq"
+	"github.com/rs/zerolog"
 )
 
 func main() {
@@ -84,7 +86,19 @@ func main() {
 	updateMetricCommand := update.New(metricsRepo)
 	getMetricQuery := get.New(metricsRepo)
 	listMetricsQuery := getlist.New(metricsRepo)
-	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery)
+
+	var auditor *audit.Subject
+	if cfg.AuditFile != "" || cfg.AuditURL != "" {
+		observers := make([]audit.Observer, 0, 2)
+		if cfg.AuditFile != "" {
+			observers = append(observers, audit.NewFileObserver(cfg.AuditFile))
+		}
+		if cfg.AuditURL != "" {
+			observers = append(observers, audit.NewURLObserver(cfg.AuditURL))
+		}
+		auditor = audit.NewSubject(logger, observers...)
+	}
+	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery, auditor)
 	r := router.NewRouter(metricController, logger, db, cfg.Key)
 
 	server := &http.Server{
