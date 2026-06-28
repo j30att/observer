@@ -115,8 +115,8 @@ func (r *InMemoryMetricsRepository) Load(_ context.Context, metricType, name str
 }
 
 func (r *InMemoryMetricsRepository) Restore(metrics []model.Metrics) error {
-	gauges := make(map[string]float64)
-	counters := make(map[string]int64)
+	gauges := make(map[string]float64, len(metrics))
+	counters := make(map[string]int64, len(metrics))
 
 	for _, metric := range metrics {
 		switch metric.MType {
@@ -151,23 +151,29 @@ func (r *InMemoryMetricsRepository) List(_ context.Context) []model.Metrics {
 	defer r.mu.RUnlock()
 
 	metrics := make([]model.Metrics, 0, len(r.gauges)+len(r.counters))
+	gaugeValues := make([]float64, len(r.gauges))
+	counterDeltas := make([]int64, len(r.counters))
 
+	i := 0
 	for name, value := range r.gauges {
-		value := value
+		gaugeValues[i] = value
 		metrics = append(metrics, model.Metrics{
 			ID:    name,
 			MType: model.Gauge,
-			Value: &value,
+			Value: &gaugeValues[i],
 		})
+		i++
 	}
 
+	i = 0
 	for name, delta := range r.counters {
-		delta := delta
+		counterDeltas[i] = delta
 		metrics = append(metrics, model.Metrics{
 			ID:    name,
 			MType: model.Counter,
-			Delta: &delta,
+			Delta: &counterDeltas[i],
 		})
+		i++
 	}
 
 	sort.Slice(metrics, func(i, j int) bool {

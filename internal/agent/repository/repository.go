@@ -37,7 +37,10 @@ func (r *MetricsRepository) Snapshot() model.MetricsSnapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	snapshot := model.NewMetricsSnapshot()
+	snapshot := model.MetricsSnapshot{
+		Gauges:   make(map[string]float64, len(r.gauges)),
+		Counters: make(map[string]int64, len(r.counters)),
+	}
 	for name, value := range r.gauges {
 		snapshot.Gauges[name] = value
 	}
