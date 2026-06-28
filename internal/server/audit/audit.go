@@ -12,21 +12,25 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// Event describes a successful metric update for audit observers.
 type Event struct {
 	Timestamp int64    `json:"ts"`
 	Metrics   []string `json:"metrics"`
 	IPAddress string   `json:"ip_address"`
 }
 
+// Observer receives audit events.
 type Observer interface {
 	Notify(ctx context.Context, event Event) error
 }
 
+// Subject broadcasts audit events to registered observers.
 type Subject struct {
 	observers []Observer
 	logger    zerolog.Logger
 }
 
+// NewSubject creates an audit event subject.
 func NewSubject(logger zerolog.Logger, observers ...Observer) *Subject {
 	return &Subject{
 		observers: observers,
@@ -34,6 +38,7 @@ func NewSubject(logger zerolog.Logger, observers ...Observer) *Subject {
 	}
 }
 
+// Notify sends event to all observers and logs observer failures.
 func (s *Subject) Notify(ctx context.Context, event Event) {
 	for _, observer := range s.observers {
 		if err := observer.Notify(ctx, event); err != nil {
@@ -42,6 +47,7 @@ func (s *Subject) Notify(ctx context.Context, event Event) {
 	}
 }
 
+// NewEvent creates an audit event for updated metric names and client IP.
 func NewEvent(metricNames []string, ipAddress string) Event {
 	return Event{
 		Timestamp: time.Now().Unix(),
@@ -50,14 +56,17 @@ func NewEvent(metricNames []string, ipAddress string) Event {
 	}
 }
 
+// FileObserver appends audit events to a local JSON-lines file.
 type FileObserver struct {
 	path string
 }
 
+// NewFileObserver creates a file audit observer.
 func NewFileObserver(path string) *FileObserver {
 	return &FileObserver{path: path}
 }
 
+// Notify writes one audit event line to the configured file.
 func (o *FileObserver) Notify(_ context.Context, event Event) error {
 	payload, err := json.Marshal(event)
 	if err != nil {
@@ -79,11 +88,13 @@ func (o *FileObserver) Notify(_ context.Context, event Event) error {
 	return nil
 }
 
+// URLObserver posts audit events to an HTTP endpoint.
 type URLObserver struct {
 	client *http.Client
 	url    string
 }
 
+// NewURLObserver creates an HTTP audit observer.
 func NewURLObserver(url string) *URLObserver {
 	return &URLObserver{
 		client: &http.Client{Timeout: 5 * time.Second},
@@ -91,6 +102,7 @@ func NewURLObserver(url string) *URLObserver {
 	}
 }
 
+// Notify posts one audit event as JSON.
 func (o *URLObserver) Notify(ctx context.Context, event Event) error {
 	payload, err := json.Marshal(event)
 	if err != nil {

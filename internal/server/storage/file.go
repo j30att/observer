@@ -10,11 +10,13 @@ import (
 	"j30att/observer/internal/server/model"
 )
 
+// FileStorage persists server metrics snapshots to a JSON file.
 type FileStorage struct {
 	path   string
 	logger zerolog.Logger
 }
 
+// NewFileStorage creates a file-backed metrics snapshot storage.
 func NewFileStorage(path string, logger zerolog.Logger) *FileStorage {
 	return &FileStorage{
 		path:   path,
@@ -22,6 +24,7 @@ func NewFileStorage(path string, logger zerolog.Logger) *FileStorage {
 	}
 }
 
+// NewRestoredFileStorage creates file storage and loads any existing snapshot.
 func NewRestoredFileStorage(path string, logger zerolog.Logger) (*FileStorage, []model.Metrics, error) {
 	storage := NewFileStorage(path, logger)
 	metrics, err := storage.load()
@@ -32,6 +35,7 @@ func NewRestoredFileStorage(path string, logger zerolog.Logger) (*FileStorage, [
 	return storage, metrics, nil
 }
 
+// Save atomically writes metrics as JSON to the configured file path.
 func (s *FileStorage) Save(metrics []model.Metrics) error {
 	dir := filepath.Dir(s.path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

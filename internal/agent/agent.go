@@ -11,14 +11,17 @@ import (
 	"j30att/observer/internal/config"
 )
 
+// Collector gathers metrics and stores them in the agent repository.
 type Collector interface {
 	Collect(store *repository.MetricsRepository) error
 }
 
+// Sender delivers a collected metrics snapshot to an external destination.
 type Sender interface {
 	Send(ctx context.Context, snapshot model.MetricsSnapshot) error
 }
 
+// Agent periodically collects runtime metrics and reports them to the server.
 type Agent struct {
 	store          *repository.MetricsRepository
 	collectors     []Collector
@@ -29,6 +32,7 @@ type Agent struct {
 	logger         zerolog.Logger
 }
 
+// New creates an agent with the provided storage, collectors, sender, and logger.
 func New(cfg config.AgentConfig, store *repository.MetricsRepository, collectors []Collector, sender Sender, logger zerolog.Logger) *Agent {
 	activeCollectors := make([]Collector, 0, len(collectors))
 	for _, collector := range collectors {
@@ -48,22 +52,27 @@ func New(cfg config.AgentConfig, store *repository.MetricsRepository, collectors
 	}
 }
 
+// PollInterval returns the configured metrics collection interval.
 func (a *Agent) PollInterval() time.Duration {
 	return a.pollInterval
 }
 
+// ReportInterval returns the configured metrics reporting interval.
 func (a *Agent) ReportInterval() time.Duration {
 	return a.reportInterval
 }
 
+// RateLimit returns the maximum number of concurrent report requests.
 func (a *Agent) RateLimit() int {
 	return a.rateLimit
 }
 
+// Store returns the metrics repository used by the agent.
 func (a *Agent) Store() *repository.MetricsRepository {
 	return a.store
 }
 
+// Poll runs each configured collector once.
 func (a *Agent) Poll() error {
 	for _, collector := range a.collectors {
 		if err := collector.Collect(a.store); err != nil {
@@ -74,10 +83,12 @@ func (a *Agent) Poll() error {
 	return nil
 }
 
+// Report sends the current metrics snapshot once.
 func (a *Agent) Report(ctx context.Context) error {
 	return a.sender.Send(ctx, a.store.Snapshot())
 }
 
+// Run starts polling and reporting loops until the context is cancelled.
 func (a *Agent) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	reports := make(chan model.MetricsSnapshot, a.rateLimit)

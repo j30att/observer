@@ -40,6 +40,7 @@ func (w *loggingResponseWriter) Write(data []byte) (int, error) {
 	return size, err
 }
 
+// Logger records request method, URI, duration, status, and response size.
 func Logger(logger zerolog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

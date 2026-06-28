@@ -16,11 +16,13 @@ const (
 	cpuUtilizationPattern = "CPUutilization%d"
 )
 
+// GopsutilCollector collects host memory and CPU metrics through gopsutil.
 type GopsutilCollector struct {
 	virtualMemory func() (*mem.VirtualMemoryStat, error)
 	cpuPercent    func(interval time.Duration, percpu bool) ([]float64, error)
 }
 
+// NewGopsutilCollector creates a collector backed by gopsutil.
 func NewGopsutilCollector() *GopsutilCollector {
 	return &GopsutilCollector{
 		virtualMemory: mem.VirtualMemory,
@@ -28,6 +30,7 @@ func NewGopsutilCollector() *GopsutilCollector {
 	}
 }
 
+// Collect stores current host memory and per-CPU utilization metrics.
 func (c *GopsutilCollector) Collect(store *repository.MetricsRepository) error {
 	memory, err := c.virtualMemory()
 	if err != nil {

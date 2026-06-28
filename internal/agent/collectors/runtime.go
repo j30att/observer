@@ -43,11 +43,13 @@ var runtimeGaugeMetrics = []runtimeGaugeMetric{
 	{name: "TotalAlloc", value: func(stats runtime.MemStats) float64 { return float64(stats.TotalAlloc) }},
 }
 
+// RuntimeCollector collects metrics from runtime.MemStats.
 type RuntimeCollector struct {
 	readMemStats func(stats *runtime.MemStats)
 	randomValue  func() float64
 }
 
+// NewRuntimeCollector creates a collector for Go runtime memory metrics.
 func NewRuntimeCollector() *RuntimeCollector {
 	return &RuntimeCollector{
 		readMemStats: runtime.ReadMemStats,
@@ -55,6 +57,7 @@ func NewRuntimeCollector() *RuntimeCollector {
 	}
 }
 
+// Collect reads runtime statistics and stores them as gauge and counter metrics.
 func (c *RuntimeCollector) Collect(store *repository.MetricsRepository) error {
 	var stats runtime.MemStats
 	c.readMemStats(&stats)

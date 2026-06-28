@@ -14,11 +14,13 @@ import (
 	"j30att/observer/internal/server/model"
 )
 
+// PostgresMetricsRepository stores metrics in PostgreSQL.
 type PostgresMetricsRepository struct {
 	db          *sql.DB
 	retryDelays []time.Duration
 }
 
+// NewPostgresMetricsRepository creates a PostgreSQL-backed metrics repository.
 func NewPostgresMetricsRepository(db *sql.DB) *PostgresMetricsRepository {
 	return &PostgresMetricsRepository{
 		db:          db,
@@ -26,6 +28,7 @@ func NewPostgresMetricsRepository(db *sql.DB) *PostgresMetricsRepository {
 	}
 }
 
+// SaveGauge stores the latest value for a gauge metric.
 func (r *PostgresMetricsRepository) SaveGauge(ctx context.Context, name string, value float64) error {
 	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
 		_, execErr := r.db.ExecContext(
@@ -49,6 +52,7 @@ func (r *PostgresMetricsRepository) SaveGauge(ctx context.Context, name string, 
 	return nil
 }
 
+// SaveCounter increments a counter metric by delta.
 func (r *PostgresMetricsRepository) SaveCounter(ctx context.Context, name string, delta int64) error {
 	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {
 		_, execErr := r.db.ExecContext(
@@ -72,6 +76,7 @@ func (r *PostgresMetricsRepository) SaveCounter(ctx context.Context, name string
 	return nil
 }
 
+// SaveBatch stores a compacted batch of gauge and counter updates.
 func (r *PostgresMetricsRepository) SaveBatch(ctx context.Context, metrics []model.Metrics) error {
 	metrics, err := compactMetrics(metrics)
 	if err != nil {
@@ -169,6 +174,7 @@ func compactMetrics(metrics []model.Metrics) ([]model.Metrics, error) {
 	return result, nil
 }
 
+// Load returns one metric by type and name.
 func (r *PostgresMetricsRepository) Load(ctx context.Context, metricType, name string) (model.Metrics, error) {
 	var metric model.Metrics
 	var delta sql.NullInt64
@@ -203,6 +209,7 @@ func (r *PostgresMetricsRepository) Load(ctx context.Context, metricType, name s
 	return metric, nil
 }
 
+// List returns all stored metrics ordered by metric name.
 func (r *PostgresMetricsRepository) List(ctx context.Context) []model.Metrics {
 	var rows *sql.Rows
 	err := retry.Do(ctx, r.retryDelays, isRetriablePostgresError, func() error {

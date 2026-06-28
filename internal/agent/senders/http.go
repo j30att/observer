@@ -18,6 +18,7 @@ import (
 	"j30att/observer/internal/signature"
 )
 
+// HTTPSender sends metrics to the server's HTTP batch update endpoint.
 type HTTPSender struct {
 	baseURL     *url.URL
 	client      *http.Client
@@ -25,6 +26,8 @@ type HTTPSender struct {
 	key         string
 }
 
+// NewHTTPSender creates an HTTP sender for the given server address.
+// When key is provided, requests are signed with HashSHA256.
 func NewHTTPSender(address string, key ...string) *HTTPSender {
 	signatureKey := ""
 	if len(key) > 0 {
@@ -60,6 +63,7 @@ func parseBaseURL(address string) *url.URL {
 	return baseURL
 }
 
+// Send posts a metrics snapshot to the configured server.
 func (s *HTTPSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapshot) error {
 	metrics := make([]agentmodel.Metrics, 0, len(snapshot.Gauges)+len(snapshot.Counters))
 	gaugeValues := make([]float64, len(snapshot.Gauges))

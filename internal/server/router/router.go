@@ -11,6 +11,7 @@ import (
 	"j30att/observer/internal/server/middlewares"
 )
 
+// NewRouter wires the HTTP routes, middlewares, controller, and health check.
 func NewRouter(metricController *controller.MetricController, logger zerolog.Logger, db ping.Pinger, key ...string) http.Handler {
 	signatureKey := ""
 	if len(key) > 0 {

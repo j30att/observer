@@ -1,10 +1,14 @@
 package model
 
 const (
+	// Counter identifies monotonically increasing counter metrics.
 	Counter = "counter"
-	Gauge   = "gauge"
+	// Gauge identifies point-in-time floating-point metrics.
+	Gauge = "gauge"
 )
 
+// Metrics is the JSON representation accepted and returned by the server API.
+//
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
 // Органичиваясь плоской моделью.
 // Delta и Value объявлены через указатели,

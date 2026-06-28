@@ -10,16 +10,20 @@ import (
 )
 
 var (
+	// ErrMetricNotFound is returned when a metric is not present in storage.
 	ErrMetricNotFound = errors.New("metric not found")
-	ErrInvalidMetric  = errors.New("invalid metric")
+	// ErrInvalidMetric is returned when a metric payload cannot be stored.
+	ErrInvalidMetric = errors.New("invalid metric")
 )
 
+// InMemoryMetricsRepository stores metrics in process memory.
 type InMemoryMetricsRepository struct {
 	mu       sync.RWMutex
 	gauges   map[string]float64
 	counters map[string]int64
 }
 
+// NewMetricsRepository creates an empty in-memory metrics repository.
 func NewMetricsRepository() *InMemoryMetricsRepository {
 	return &InMemoryMetricsRepository{
 		gauges:   make(map[string]float64),
@@ -27,6 +31,7 @@ func NewMetricsRepository() *InMemoryMetricsRepository {
 	}
 }
 
+// SaveGauge stores the latest value for a gauge metric.
 func (r *InMemoryMetricsRepository) SaveGauge(_ context.Context, name string, value float64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -35,6 +40,7 @@ func (r *InMemoryMetricsRepository) SaveGauge(_ context.Context, name string, va
 	return nil
 }
 
+// SaveCounter increments a counter metric by delta.
 func (r *InMemoryMetricsRepository) SaveCounter(_ context.Context, name string, delta int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -43,6 +49,7 @@ func (r *InMemoryMetricsRepository) SaveCounter(_ context.Context, name string, 
 	return nil
 }
 
+// SaveBatch stores a batch of gauge and counter updates atomically.
 func (r *InMemoryMetricsRepository) SaveBatch(_ context.Context, metrics []model.Metrics) error {
 	for _, metric := range metrics {
 		if err := validateMetric(metric); err != nil {
@@ -82,6 +89,7 @@ func validateMetric(metric model.Metrics) error {
 	return nil
 }
 
+// Load returns one metric by type and name.
 func (r *InMemoryMetricsRepository) Load(_ context.Context, metricType, name string) (model.Metrics, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -114,6 +122,7 @@ func (r *InMemoryMetricsRepository) Load(_ context.Context, metricType, name str
 	}
 }
 
+// Restore replaces all in-memory metrics with a previously saved snapshot.
 func (r *InMemoryMetricsRepository) Restore(metrics []model.Metrics) error {
 	gauges := make(map[string]float64, len(metrics))
 	counters := make(map[string]int64, len(metrics))
@@ -146,6 +155,7 @@ func (r *InMemoryMetricsRepository) Restore(metrics []model.Metrics) error {
 	return nil
 }
 
+// List returns all stored metrics ordered by metric name.
 func (r *InMemoryMetricsRepository) List(_ context.Context) []model.Metrics {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

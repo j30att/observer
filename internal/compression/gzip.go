@@ -7,8 +7,10 @@ import (
 	"io"
 )
 
+// GzipEncoding is the HTTP content-coding token for gzip payloads.
 const GzipEncoding = "gzip"
 
+// CompressGzip returns body compressed with gzip.
 func CompressGzip(body []byte) ([]byte, error) {
 	var compressed bytes.Buffer
 
@@ -25,10 +27,12 @@ func CompressGzip(body []byte) ([]byte, error) {
 	return compressed.Bytes(), nil
 }
 
+// NewGzipWriter wraps writer with a gzip compressor.
 func NewGzipWriter(writer io.Writer) io.WriteCloser {
 	return gzip.NewWriter(writer)
 }
 
+// NewGzipReadCloser wraps body with a gzip reader and closes both readers.
 func NewGzipReadCloser(body io.ReadCloser) (io.ReadCloser, error) {
 	gzipBody, err := gzip.NewReader(body)
 	if err != nil {

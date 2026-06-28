@@ -42,6 +42,7 @@ func (w *signatureResponseWriter) Write(data []byte) (int, error) {
 	return w.body.Write(data)
 }
 
+// Signature verifies signed request bodies and signs response bodies.
 func Signature(key string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

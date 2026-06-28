@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// ServerConfig contains runtime settings for the metrics HTTP server.
 type ServerConfig struct {
 	Address         string
 	StoreInterval   time.Duration
@@ -21,6 +22,7 @@ type ServerConfig struct {
 	AuditURL        string
 }
 
+// NewServerConfig returns the default server configuration.
 func NewServerConfig() ServerConfig {
 	return ServerConfig{
 		Address:         "localhost:8080",
@@ -30,6 +32,8 @@ func NewServerConfig() ServerConfig {
 	}
 }
 
+// ParseServerConfig reads server flags and environment variables into a config.
+// Environment variables override flag values.
 func ParseServerConfig(args []string) (ServerConfig, error) {
 	cfg := NewServerConfig()
 	var storeIntervalSeconds int

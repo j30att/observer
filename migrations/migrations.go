@@ -14,6 +14,7 @@ import (
 //go:embed *.sql
 var migrationsFS embed.FS
 
+// Up applies all embedded database migrations.
 func Up(db *sql.DB) error {
 	sourceDriver, err := iofs.New(migrationsFS, ".")
 	if err != nil {
