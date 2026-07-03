@@ -62,6 +62,28 @@ go test ./internal/agent/senders -bench=BenchmarkHTTPSenderSend -benchmem -mempr
 pprof -top -diff_base=profiles/base.pprof profiles/result.pprof
 ```
 
+Вывод `pprof -top -diff_base=profiles/base.pprof profiles/result.pprof`:
+
+```text
+File: senders.test
+Type: alloc_space
+Time: 2026-06-28 22:17:35 +08
+Showing nodes accounting for -70.27MB, 2.60% of 2700.48MB total
+Dropped 9 nodes (cum <= 13.50MB)
+      flat  flat%   sum%        cum   cum%
+  -56.41MB  2.09%  2.09%   -67.12MB  2.49%  compress/flate.NewWriter (inline)
+  -11.59MB  0.43%  2.52%   -69.10MB  2.56%  j30att/observer/internal/agent/senders.(*HTTPSender).Send
+  -10.20MB  0.38%  2.49%   -10.20MB  0.38%  compress/flate.(*compressor).initDeflate (inline)
+   -6.71MB  0.25%  2.73%    -6.71MB  0.25%  net/http.init.func16
+   -4.51MB  0.17%  2.73%    -4.51MB  0.17%  compress/flate.(*huffmanEncoder).generate
+   -2.50MB 0.093%  2.83%    -2.50MB 0.093%  compress/flate.newHuffmanEncoder (inline)
+         0     0%  2.60%   -57.51MB  2.13%  j30att/observer/internal/agent/senders.(*HTTPSender).sendMetrics
+         0     0%  2.60%   -66.84MB  2.47%  j30att/observer/internal/agent/senders.BenchmarkHTTPSenderSend
+         0     0%  2.60%   -70.12MB  2.60%  j30att/observer/internal/compression.CompressGzip
+```
+
+Отрицательные значения в diff-профиле показывают снижение потребления памяти относительно `profiles/base.pprof`.
+
 Результаты `benchmem` на Apple M1 Pro:
 
 | Бенчмарк | До | После |

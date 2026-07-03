@@ -98,6 +98,17 @@ func main() {
 		}
 		auditor = audit.NewSubject(logger, observers...)
 	}
+	closeAuditor := func() {
+		if auditor == nil {
+			return
+		}
+
+		if err := auditor.Close(); err != nil {
+			logger.Error().Err(err).Msg("failed to close audit subject")
+		}
+	}
+	defer closeAuditor()
+
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery, auditor)
 	r := router.NewRouter(metricController, logger, db, cfg.Key)
 
@@ -111,6 +122,7 @@ func main() {
 	}
 
 	if err := server.ListenAndServe(); err != nil {
+		closeAuditor()
 		logger.Fatal().Err(err).Msg("server stopped")
 	}
 }

@@ -27,7 +27,7 @@ func BenchmarkHTTPSenderSend(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		if err := sender.Send(context.Background(), snapshot); err != nil {
 			b.Fatal(err)
 		}

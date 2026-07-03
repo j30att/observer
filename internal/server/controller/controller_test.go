@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -133,6 +134,9 @@ func TestMetricController(t *testing.T) {
 				listMetricsQuery,
 				auditor,
 			)
+			defer func() {
+				require.NoError(t, auditor.Close())
+			}()
 			r = router.NewRouter(metricController, testLogger, nil)
 
 			req := newJSONRequest(t, http.MethodPost, "/updates", []map[string]any{
@@ -147,7 +151,14 @@ func TestMetricController(t *testing.T) {
 			require.Equal(t, http.StatusOK, rec.Code)
 
 			var event audit.Event
-			require.NoError(t, json.Unmarshal(readAuditLine(t, auditPath), &event))
+			require.Eventually(t, func() bool {
+				line, ok := tryReadAuditLine(t, auditPath)
+				if !ok {
+					return false
+				}
+
+				return json.Unmarshal(line, &event) == nil
+			}, time.Second, 10*time.Millisecond)
 			assert.Positive(t, event.Timestamp)
 			assert.Equal(t, []string{"Alloc", "PollCount"}, event.Metrics)
 			assert.Equal(t, "192.168.0.42", event.IPAddress)
@@ -493,11 +504,24 @@ func readGzipBody(t *testing.T, body []byte) []byte {
 func readAuditLine(t *testing.T, path string) []byte {
 	t.Helper()
 
+	line, ok := tryReadAuditLine(t, path)
+	require.True(t, ok)
+
+	return line
+}
+
+func tryReadAuditLine(t *testing.T, path string) ([]byte, bool) {
+	t.Helper()
+
 	body, err := os.ReadFile(path)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, false
+	}
 
 	lines := bytes.Split(bytes.TrimSpace(body), []byte("\n"))
-	require.Len(t, lines, 1)
+	if len(lines) != 1 {
+		return nil, false
+	}
 
-	return lines[0]
+	return lines[0], true
 }

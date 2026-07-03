@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"j30att/observer/internal/server/audit"
@@ -19,6 +20,9 @@ import (
 func TestFileObserver(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "audit.log")
 	observer := audit.NewFileObserver(path)
+	t.Cleanup(func() {
+		require.NoError(t, observer.Close())
+	})
 	event := audit.Event{Timestamp: 12345678, Metrics: []string{"Alloc", "Frees"}, IPAddress: "192.168.0.42"}
 
 	require.NoError(t, observer.Notify(context.Background(), event))
@@ -82,6 +86,49 @@ func TestURLObserverReturnsErrorOnUnexpectedStatus(t *testing.T) {
 	err := observer.Notify(context.Background(), audit.Event{})
 
 	require.EqualError(t, err, "unexpected audit response status: 502 Bad Gateway")
+}
+
+func TestSubjectNotifyDoesNotBlockObservers(t *testing.T) {
+	event := audit.Event{Timestamp: 12345678, Metrics: []string{"Alloc"}, IPAddress: "192.168.0.42"}
+	slowStarted := make(chan struct{})
+	releaseSlow := make(chan struct{})
+	fastReceived := make(chan audit.Event, 1)
+
+	slowObserver := observerFunc(func(_ context.Context, _ audit.Event) error {
+		close(slowStarted)
+		<-releaseSlow
+		return nil
+	})
+	fastObserver := observerFunc(func(_ context.Context, event audit.Event) error {
+		fastReceived <- event
+		return nil
+	})
+	subject := audit.NewSubject(zerolog.Nop(), slowObserver, fastObserver)
+	defer func() {
+		close(releaseSlow)
+		require.NoError(t, subject.Close())
+	}()
+
+	subject.Notify(context.Background(), event)
+
+	select {
+	case <-slowStarted:
+	case <-time.After(time.Second):
+		t.Fatal("slow observer was not called")
+	}
+
+	select {
+	case actual := <-fastReceived:
+		assert.Equal(t, event, actual)
+	case <-time.After(time.Second):
+		t.Fatal("fast observer was blocked by slow observer")
+	}
+}
+
+type observerFunc func(context.Context, audit.Event) error
+
+func (f observerFunc) Notify(ctx context.Context, event audit.Event) error {
+	return f(ctx, event)
 }
 
 func openFile(t *testing.T, path string) *os.File {

@@ -21,7 +21,7 @@ func BenchmarkInMemoryMetricsRepositoryList(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for range b.N {
+	for b.Loop() {
 		_ = repo.List(ctx)
 	}
 }
