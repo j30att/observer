@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// AgentConfig contains runtime settings for the metrics collection agent.
 type AgentConfig struct {
 	ServerAddress  string
 	PollInterval   time.Duration
@@ -17,6 +18,7 @@ type AgentConfig struct {
 	RateLimit      int
 }
 
+// NewAgentConfig returns the default agent configuration.
 func NewAgentConfig() AgentConfig {
 	return AgentConfig{
 		ServerAddress:  "localhost:8080",
@@ -26,6 +28,8 @@ func NewAgentConfig() AgentConfig {
 	}
 }
 
+// ParseAgentConfig reads agent flags and environment variables into a config.
+// Environment variables override flag values.
 func ParseAgentConfig(args []string) (AgentConfig, error) {
 	cfg := NewAgentConfig()
 	var reportSeconds int

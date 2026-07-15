@@ -42,3 +42,58 @@ git fetch template && git checkout template/v2 .github
 - **Clean Architecture**
 - **Hexagonal Architecture**
 - **Layered Architecture**
+
+## Профилирование памяти
+
+Добавлены бенчмарки для основных операций, которые часто выполняются во время работы агента и сервера:
+
+- `BenchmarkMetricsRepositorySnapshot`: копирование снимка метрик агента перед отправкой.
+- `BenchmarkHTTPSenderSend`: подготовка и отправка batch с gauge/counter метриками.
+- `BenchmarkInMemoryMetricsRepositoryList`: сбор списка серверных метрик для ответа и сохранения snapshot.
+
+Базовый профиль памяти сохранён в `profiles/base.pprof`, повторный профиль после оптимизации - в `profiles/result.pprof`.
+
+Команды для воспроизведения:
+
+```shell
+go test ./internal/agent/repository ./internal/agent/senders ./internal/server/repository -bench=. -benchmem
+go test ./internal/agent/senders -bench=BenchmarkHTTPSenderSend -benchmem -memprofile=profiles/base.pprof
+go test ./internal/agent/senders -bench=BenchmarkHTTPSenderSend -benchmem -memprofile=profiles/result.pprof
+pprof -top -diff_base=profiles/base.pprof profiles/result.pprof
+```
+
+Вывод `pprof -top -diff_base=profiles/base.pprof profiles/result.pprof`:
+
+```text
+File: senders.test
+Type: alloc_space
+Time: 2026-06-28 22:17:35 +08
+Showing nodes accounting for -70.27MB, 2.60% of 2700.48MB total
+Dropped 9 nodes (cum <= 13.50MB)
+      flat  flat%   sum%        cum   cum%
+  -56.41MB  2.09%  2.09%   -67.12MB  2.49%  compress/flate.NewWriter (inline)
+  -11.59MB  0.43%  2.52%   -69.10MB  2.56%  j30att/observer/internal/agent/senders.(*HTTPSender).Send
+  -10.20MB  0.38%  2.49%   -10.20MB  0.38%  compress/flate.(*compressor).initDeflate (inline)
+   -6.71MB  0.25%  2.73%    -6.71MB  0.25%  net/http.init.func16
+   -4.51MB  0.17%  2.73%    -4.51MB  0.17%  compress/flate.(*huffmanEncoder).generate
+   -2.50MB 0.093%  2.83%    -2.50MB 0.093%  compress/flate.newHuffmanEncoder (inline)
+         0     0%  2.60%   -57.51MB  2.13%  j30att/observer/internal/agent/senders.(*HTTPSender).sendMetrics
+         0     0%  2.60%   -66.84MB  2.47%  j30att/observer/internal/agent/senders.BenchmarkHTTPSenderSend
+         0     0%  2.60%   -70.12MB  2.60%  j30att/observer/internal/compression.CompressGzip
+```
+
+Отрицательные значения в diff-профиле показывают снижение потребления памяти относительно `profiles/base.pprof`.
+
+Результаты `benchmem` на Apple M1 Pro:
+
+| Бенчмарк | До | После |
+| --- | ---: | ---: |
+| `BenchmarkMetricsRepositorySnapshot` | `9556 ns/op`, `13904 B/op`, `22 allocs/op` | `4664 ns/op`, `7088 B/op`, `8 allocs/op` |
+| `BenchmarkHTTPSenderSend` | `450529 ns/op`, `877057 B/op`, `320 allocs/op` | `356910 ns/op`, `875593 B/op`, `121 allocs/op` |
+| `BenchmarkInMemoryMetricsRepositoryList` | `24058 ns/op`, `15304 B/op`, `204 allocs/op` | `22452 ns/op`, `15496 B/op`, `6 allocs/op` |
+
+Что было оптимизировано:
+
+- В `MetricsRepository.Snapshot` карты создаются сразу с нужной capacity.
+- В `HTTPSender.Send` значения gauge/counter хранятся в backing slices, поэтому для полей `Value` и `Delta` больше не создаётся отдельная heap-аллокация на каждую метрику.
+- В `InMemoryMetricsRepository.List` применён такой же подход с backing slices для значений метрик; количество аллокаций снизилось с 204 до 6 на наборе из 200 метрик.

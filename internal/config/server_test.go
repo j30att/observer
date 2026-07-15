@@ -20,6 +20,8 @@ func TestServerConfig(t *testing.T) {
 			assert.True(t, cfg.Restore)
 			assert.Empty(t, cfg.DatabaseDSN)
 			assert.Empty(t, cfg.Key)
+			assert.Empty(t, cfg.AuditFile)
+			assert.Empty(t, cfg.AuditURL)
 		})
 	})
 
@@ -34,6 +36,8 @@ func TestServerConfig(t *testing.T) {
 			assert.True(t, cfg.Restore)
 			assert.Empty(t, cfg.DatabaseDSN)
 			assert.Empty(t, cfg.Key)
+			assert.Empty(t, cfg.AuditFile)
+			assert.Empty(t, cfg.AuditURL)
 		})
 
 		t.Run("Должен переопределить values из flags", func(t *testing.T) {
@@ -44,6 +48,8 @@ func TestServerConfig(t *testing.T) {
 				"-r=false",
 				"-d=postgres://user:password@example.com:5432/observer?sslmode=require",
 				"-k=flag-key",
+				"--audit-file=/tmp/audit.log",
+				"--audit-url=https://audit.example.com/events",
 			})
 
 			require.NoError(t, err)
@@ -53,6 +59,8 @@ func TestServerConfig(t *testing.T) {
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://user:password@example.com:5432/observer?sslmode=require", cfg.DatabaseDSN)
 			assert.Equal(t, "flag-key", cfg.Key)
+			assert.Equal(t, "/tmp/audit.log", cfg.AuditFile)
+			assert.Equal(t, "https://audit.example.com/events", cfg.AuditURL)
 		})
 
 		t.Run("Должен переопределить values из environment", func(t *testing.T) {
@@ -62,6 +70,8 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("RESTORE", "false")
 			t.Setenv("DATABASE_DSN", "postgres://env-dsn")
 			t.Setenv("KEY", "env-key")
+			t.Setenv("AUDIT_FILE", "/tmp/env-audit.log")
+			t.Setenv("AUDIT_URL", "https://audit.example.com/env")
 
 			cfg, err := config.ParseServerConfig(nil)
 
@@ -72,6 +82,8 @@ func TestServerConfig(t *testing.T) {
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://env-dsn", cfg.DatabaseDSN)
 			assert.Equal(t, "env-key", cfg.Key)
+			assert.Equal(t, "/tmp/env-audit.log", cfg.AuditFile)
+			assert.Equal(t, "https://audit.example.com/env", cfg.AuditURL)
 		})
 
 		t.Run("Должен отдать приоритет environment над flags", func(t *testing.T) {
@@ -81,6 +93,8 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("RESTORE", "false")
 			t.Setenv("DATABASE_DSN", "postgres://env-dsn")
 			t.Setenv("KEY", "env-key")
+			t.Setenv("AUDIT_FILE", "/tmp/env-audit.log")
+			t.Setenv("AUDIT_URL", "https://audit.example.com/env")
 
 			cfg, err := config.ParseServerConfig([]string{
 				"-a=127.0.0.1:9000",
@@ -89,6 +103,8 @@ func TestServerConfig(t *testing.T) {
 				"-r=true",
 				"-d=postgres://flag-dsn",
 				"-k=flag-key",
+				"--audit-file=/tmp/flag-audit.log",
+				"--audit-url=https://audit.example.com/flag",
 			})
 
 			require.NoError(t, err)
@@ -98,6 +114,8 @@ func TestServerConfig(t *testing.T) {
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://env-dsn", cfg.DatabaseDSN)
 			assert.Equal(t, "env-key", cfg.Key)
+			assert.Equal(t, "/tmp/env-audit.log", cfg.AuditFile)
+			assert.Equal(t, "https://audit.example.com/env", cfg.AuditURL)
 		})
 
 		t.Run("Ошибка, неизвестный flag", func(t *testing.T) {
@@ -134,6 +152,12 @@ func TestServerConfig(t *testing.T) {
 			_, err := config.ParseServerConfig(nil)
 
 			require.EqualError(t, err, "invalid RESTORE value: \"maybe\" is not a valid boolean")
+		})
+
+		t.Run("Ошибка, невалидный audit URL", func(t *testing.T) {
+			_, err := config.ParseServerConfig([]string{"--audit-url=localhost:9000/audit"})
+
+			require.EqualError(t, err, `invalid audit URL "localhost:9000/audit": full URL with scheme and host is required`)
 		})
 	})
 }

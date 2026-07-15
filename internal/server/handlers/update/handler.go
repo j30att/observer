@@ -8,6 +8,7 @@ import (
 	"j30att/observer/internal/server/model"
 )
 
+// ErrUnsupportedMetricType is returned for unknown or incomplete metric payloads.
 var ErrUnsupportedMetricType = errors.New("unsupported metric type")
 
 type metricsUpdater interface {
@@ -16,14 +17,17 @@ type metricsUpdater interface {
 	SaveBatch(ctx context.Context, metrics []model.Metrics) error
 }
 
+// Handler validates and stores metric updates.
 type Handler struct {
 	repo metricsUpdater
 }
 
+// New creates an update handler backed by repo.
 func New(repo metricsUpdater) *Handler {
 	return &Handler{repo: repo}
 }
 
+// Execute stores a single metric update from path parameters.
 func (h *Handler) Execute(ctx context.Context, metricType, name, rawValue string) error {
 	switch metricType {
 	case model.Gauge:
@@ -45,6 +49,7 @@ func (h *Handler) Execute(ctx context.Context, metricType, name, rawValue string
 	}
 }
 
+// ExecuteBatch validates and stores a batch of metric updates.
 func (h *Handler) ExecuteBatch(ctx context.Context, metrics []model.Metrics) error {
 	for _, metric := range metrics {
 		if err := validateMetric(metric); err != nil {

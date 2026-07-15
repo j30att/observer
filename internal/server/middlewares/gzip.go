@@ -66,6 +66,7 @@ func (w *gzipResponseWriter) Close() error {
 	return w.writer.Close()
 }
 
+// Gzip decompresses gzip request bodies and compresses JSON or HTML responses.
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if hasEncoding(r.Header.Get("Content-Encoding"), compression.GzipEncoding) {

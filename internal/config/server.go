@@ -4,11 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
 )
 
+// ServerConfig contains runtime settings for the metrics HTTP server.
 type ServerConfig struct {
 	Address         string
 	StoreInterval   time.Duration
@@ -16,8 +18,11 @@ type ServerConfig struct {
 	Restore         bool
 	DatabaseDSN     string
 	Key             string
+	AuditFile       string
+	AuditURL        string
 }
 
+// NewServerConfig returns the default server configuration.
 func NewServerConfig() ServerConfig {
 	return ServerConfig{
 		Address:         "localhost:8080",
@@ -27,6 +32,8 @@ func NewServerConfig() ServerConfig {
 	}
 }
 
+// ParseServerConfig reads server flags and environment variables into a config.
+// Environment variables override flag values.
 func ParseServerConfig(args []string) (ServerConfig, error) {
 	cfg := NewServerConfig()
 	var storeIntervalSeconds int
@@ -39,6 +46,8 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 	fs.BoolVar(&cfg.Restore, "r", cfg.Restore, "restore metrics from file storage on startup")
 	fs.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "database connection DSN")
 	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
+	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit log file path")
+	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit log receiver URL")
 
 	if err := fs.Parse(args); err != nil {
 		return ServerConfig{}, err
@@ -72,8 +81,23 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		cfg.Key = value
 	}
 
+	if value, ok := os.LookupEnv("AUDIT_FILE"); ok {
+		cfg.AuditFile = value
+	}
+
+	if value, ok := os.LookupEnv("AUDIT_URL"); ok {
+		cfg.AuditURL = value
+	}
+
 	if storeIntervalSeconds < 0 {
 		return ServerConfig{}, fmt.Errorf("invalid store interval value %d: interval must be non-negative seconds", storeIntervalSeconds)
+	}
+
+	if cfg.AuditURL != "" {
+		parsedURL, err := url.ParseRequestURI(cfg.AuditURL)
+		if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
+			return ServerConfig{}, fmt.Errorf("invalid audit URL %q: full URL with scheme and host is required", cfg.AuditURL)
+		}
 	}
 
 	cfg.StoreInterval = time.Duration(storeIntervalSeconds) * time.Second
