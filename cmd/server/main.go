@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	stdlog "log"
 	"net/http"
 	"os"
@@ -24,7 +25,13 @@ import (
 	"github.com/rs/zerolog"
 )
 
+var buildVersion string
+var buildDate string
+var buildCommit string
+
 func main() {
+	printBuildInfo()
+
 	cfg, err := config.ParseServerConfig(os.Args[1:])
 	if err != nil {
 		stdlog.Fatal(err)
@@ -125,4 +132,18 @@ func main() {
 		closeAuditor()
 		logger.Fatal().Err(err).Msg("server stopped")
 	}
+}
+
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\n", buildValue(buildVersion))
+	fmt.Printf("Build date: %s\n", buildValue(buildDate))
+	fmt.Printf("Build commit: %s\n", buildValue(buildCommit))
+}
+
+func buildValue(value string) string {
+	if value == "" {
+		return "N/A"
+	}
+
+	return value
 }
