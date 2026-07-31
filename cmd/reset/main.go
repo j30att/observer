@@ -341,8 +341,7 @@ func writeResetterOrZero(out *bytes.Buffer, access string, expr ast.Expr, resett
 }
 
 func writeZeroAssignment(out *bytes.Buffer, access string, expr ast.Expr) {
-	fmt.Fprintf(out, "var zero %s\n", types.ExprString(expr))
-	fmt.Fprintf(out, "%s = zero\n", access)
+	fmt.Fprintf(out, "%s = *new(%s)\n", access, types.ExprString(expr))
 }
 
 func isPrimitiveIdent(name string) bool {

@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	stdlog "log"
 	"net/http"
 	"os"
 	"time"
 
+	"j30att/observer/internal/buildinfo"
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/server/audit"
 	"j30att/observer/internal/server/controller"
@@ -25,12 +25,14 @@ import (
 	"github.com/rs/zerolog"
 )
 
-var buildVersion string
-var buildDate string
-var buildCommit string
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
 
 func main() {
-	printBuildInfo()
+	buildinfo.Print(os.Stdout, buildVersion, buildDate, buildCommit)
 
 	cfg, err := config.ParseServerConfig(os.Args[1:])
 	if err != nil {
@@ -132,18 +134,4 @@ func main() {
 		closeAuditor()
 		logger.Fatal().Err(err).Msg("server stopped")
 	}
-}
-
-func printBuildInfo() {
-	fmt.Printf("Build version: %s\n", buildValue(buildVersion))
-	fmt.Printf("Build date: %s\n", buildValue(buildDate))
-	fmt.Printf("Build commit: %s\n", buildValue(buildCommit))
-}
-
-func buildValue(value string) string {
-	if value == "" {
-		return "N/A"
-	}
-
-	return value
 }

@@ -51,10 +51,12 @@ func (n *Nested) Reset() {
 	wantSnippets := []string{
 		"func (r *ResetableStruct) Reset()",
 		"if r == nil",
+		"r.i = *new(int)",
+		"r.str = *new(string)",
 		"r.s = r.s[:0]",
 		"clear(r.m)",
 		"if r.strP != nil",
-		"*r.strP = zero",
+		"*r.strP = *new(string)",
 		"if resetter, ok := any(r.child).(interface{ Reset() }); ok",
 		"if resetter, ok := any(&r.nested).(interface{ Reset() }); ok",
 		"r.anon.values = r.anon.values[:0]",
@@ -63,5 +65,8 @@ func (n *Nested) Reset() {
 		if !strings.Contains(source, want) {
 			t.Fatalf("generated source does not contain %q:\n%s", want, source)
 		}
+	}
+	if strings.Contains(source, "var zero") {
+		t.Fatalf("generated source contains a reusable zero variable:\n%s", source)
 	}
 }

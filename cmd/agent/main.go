@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/rs/zerolog"
@@ -10,15 +9,18 @@ import (
 	"j30att/observer/internal/agent/collectors"
 	"j30att/observer/internal/agent/repository"
 	"j30att/observer/internal/agent/senders"
+	"j30att/observer/internal/buildinfo"
 	"j30att/observer/internal/config"
 )
 
-var buildVersion string
-var buildDate string
-var buildCommit string
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
 
 func main() {
-	printBuildInfo()
+	buildinfo.Print(os.Stdout, buildVersion, buildDate, buildCommit)
 
 	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
 
@@ -37,18 +39,4 @@ func main() {
 	if err := app.Run(context.Background()); err != nil {
 		logger.Fatal().Err(err).Msg("agent stopped")
 	}
-}
-
-func printBuildInfo() {
-	fmt.Printf("Build version: %s\n", buildValue(buildVersion))
-	fmt.Printf("Build date: %s\n", buildValue(buildDate))
-	fmt.Printf("Build commit: %s\n", buildValue(buildCommit))
-}
-
-func buildValue(value string) string {
-	if value == "" {
-		return "N/A"
-	}
-
-	return value
 }
