@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -23,6 +24,18 @@ type ServerConfig struct {
 	AuditURL        string
 }
 
+type serverFileConfig struct {
+	Address       *string `json:"address"`
+	Restore       *bool   `json:"restore"`
+	StoreInterval *string `json:"store_interval"`
+	StoreFile     *string `json:"store_file"`
+	DatabaseDSN   *string `json:"database_dsn"`
+	Key           *string `json:"key"`
+	CryptoKey     *string `json:"crypto_key"`
+	AuditFile     *string `json:"audit_file"`
+	AuditURL      *string `json:"audit_url"`
+}
+
 // NewServerConfig returns the default server configuration.
 func NewServerConfig() ServerConfig {
 	return ServerConfig{
@@ -33,35 +46,40 @@ func NewServerConfig() ServerConfig {
 	}
 }
 
-// ParseServerConfig reads server flags and environment variables into a config.
-// Environment variables override flag values.
+// ParseServerConfig reads the server config file, flags, and environment variables.
+// Environment variables override flags, and flags override values from the file.
 func ParseServerConfig(args []string) (ServerConfig, error) {
+	probe := NewServerConfig()
+	configPath, err := parseServerFlags(&probe, args)
+	if err != nil {
+		return ServerConfig{}, err
+	}
+	if value, ok := os.LookupEnv("CONFIG"); ok {
+		configPath = value
+	}
+
 	cfg := NewServerConfig()
-	var storeIntervalSeconds int
+	if configPath != "" {
+		if err := loadServerFile(configPath, &cfg); err != nil {
+			return ServerConfig{}, err
+		}
+	}
 
-	fs := flag.NewFlagSet("server", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	fs.StringVar(&cfg.Address, "a", cfg.Address, "HTTP server endpoint address")
-	fs.IntVar(&storeIntervalSeconds, "i", int(cfg.StoreInterval/time.Second), "store interval in seconds")
-	fs.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "file storage path")
-	fs.BoolVar(&cfg.Restore, "r", cfg.Restore, "restore metrics from file storage on startup")
-	fs.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "database connection DSN")
-	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
-	fs.StringVar(&cfg.CryptoKey, "crypto-key", cfg.CryptoKey, "path to the private encryption key")
-	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit log file path")
-	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit log receiver URL")
-
-	if err := fs.Parse(args); err != nil {
+	if _, err := parseServerFlags(&cfg, args); err != nil {
 		return ServerConfig{}, err
 	}
 
-	if value, ok, err := lookupEnvInt("STORE_INTERVAL"); err != nil {
+	if value, ok, err := lookupEnvDurationSeconds("STORE_INTERVAL"); err != nil {
 		return ServerConfig{}, fmt.Errorf("invalid STORE_INTERVAL value: %w", err)
 	} else if ok {
-		storeIntervalSeconds = value
+		cfg.StoreInterval = value
 	}
 
 	if value, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
+		cfg.FileStoragePath = value
+	}
+
+	if value, ok := os.LookupEnv("STORE_FILE"); ok {
 		cfg.FileStoragePath = value
 	}
 
@@ -95,8 +113,8 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		cfg.AuditURL = value
 	}
 
-	if storeIntervalSeconds < 0 {
-		return ServerConfig{}, fmt.Errorf("invalid store interval value %d: interval must be non-negative seconds", storeIntervalSeconds)
+	if cfg.StoreInterval < 0 {
+		return ServerConfig{}, fmt.Errorf("invalid store interval value %d: interval must be non-negative seconds", int(cfg.StoreInterval/time.Second))
 	}
 
 	if cfg.AuditURL != "" {
@@ -106,9 +124,83 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		}
 	}
 
-	cfg.StoreInterval = time.Duration(storeIntervalSeconds) * time.Second
-
 	return cfg, nil
+}
+
+func parseServerFlags(cfg *ServerConfig, args []string) (string, error) {
+	var storeIntervalSeconds int
+	var configPath string
+
+	fs := flag.NewFlagSet("server", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.StringVar(&cfg.Address, "a", cfg.Address, "HTTP server endpoint address")
+	fs.IntVar(&storeIntervalSeconds, "i", int(cfg.StoreInterval/time.Second), "store interval in seconds")
+	fs.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "file storage path")
+	fs.BoolVar(&cfg.Restore, "r", cfg.Restore, "restore metrics from file storage on startup")
+	fs.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "database connection DSN")
+	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
+	fs.StringVar(&cfg.CryptoKey, "crypto-key", cfg.CryptoKey, "path to the private encryption key")
+	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit log file path")
+	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit log receiver URL")
+	fs.StringVar(&configPath, "c", configPath, "path to the JSON configuration file")
+	fs.StringVar(&configPath, "config", configPath, "path to the JSON configuration file")
+
+	if err := fs.Parse(args); err != nil {
+		return "", err
+	}
+
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "i" {
+			cfg.StoreInterval = time.Duration(storeIntervalSeconds) * time.Second
+		}
+	})
+
+	return configPath, nil
+}
+
+func loadServerFile(path string, cfg *ServerConfig) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read server config file %q: %w", path, err)
+	}
+
+	var fileCfg serverFileConfig
+	if err := json.Unmarshal(data, &fileCfg); err != nil {
+		return fmt.Errorf("parse server config file %q: %w", path, err)
+	}
+
+	if fileCfg.Address != nil {
+		cfg.Address = *fileCfg.Address
+	}
+	if fileCfg.Restore != nil {
+		cfg.Restore = *fileCfg.Restore
+	}
+	if fileCfg.StoreInterval != nil {
+		cfg.StoreInterval, err = time.ParseDuration(*fileCfg.StoreInterval)
+		if err != nil {
+			return fmt.Errorf("invalid store_interval in server config file %q: %w", path, err)
+		}
+	}
+	if fileCfg.StoreFile != nil {
+		cfg.FileStoragePath = *fileCfg.StoreFile
+	}
+	if fileCfg.DatabaseDSN != nil {
+		cfg.DatabaseDSN = *fileCfg.DatabaseDSN
+	}
+	if fileCfg.Key != nil {
+		cfg.Key = *fileCfg.Key
+	}
+	if fileCfg.CryptoKey != nil {
+		cfg.CryptoKey = *fileCfg.CryptoKey
+	}
+	if fileCfg.AuditFile != nil {
+		cfg.AuditFile = *fileCfg.AuditFile
+	}
+	if fileCfg.AuditURL != nil {
+		cfg.AuditURL = *fileCfg.AuditURL
+	}
+
+	return nil
 }
 
 func lookupEnvBool(key string) (bool, bool, error) {
