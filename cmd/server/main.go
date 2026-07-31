@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"j30att/observer/internal/buildinfo"
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/server/audit"
 	"j30att/observer/internal/server/controller"
@@ -24,7 +25,15 @@ import (
 	"github.com/rs/zerolog"
 )
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
 func main() {
+	buildinfo.Print(os.Stdout, buildVersion, buildDate, buildCommit)
+
 	cfg, err := config.ParseServerConfig(os.Args[1:])
 	if err != nil {
 		stdlog.Fatal(err)
