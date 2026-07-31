@@ -3,6 +3,7 @@ package senders
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	agentmodel "j30att/observer/internal/agent/model"
 	"j30att/observer/internal/compression"
+	"j30att/observer/internal/encryption"
 	"j30att/observer/internal/retry"
 	"j30att/observer/internal/signature"
 )
@@ -24,21 +26,34 @@ type HTTPSender struct {
 	client      *http.Client
 	retryDelays []time.Duration
 	key         string
+	publicKey   *rsa.PublicKey
+}
+
+// HTTPSenderOptions contains optional request signing and encryption settings.
+type HTTPSenderOptions struct {
+	SignatureKey string
+	PublicKey    *rsa.PublicKey
 }
 
 // NewHTTPSender creates an HTTP sender for the given server address.
-// When key is provided, requests are signed with HashSHA256.
+// When a key is provided, requests are signed with HashSHA256.
 func NewHTTPSender(address string, key ...string) *HTTPSender {
-	signatureKey := ""
+	var signatureKey string
 	if len(key) > 0 {
 		signatureKey = key[0]
 	}
 
+	return NewHTTPSenderWithOptions(address, HTTPSenderOptions{SignatureKey: signatureKey})
+}
+
+// NewHTTPSenderWithOptions creates an HTTP sender with signing and encryption settings.
+func NewHTTPSenderWithOptions(address string, opts HTTPSenderOptions) *HTTPSender {
 	return &HTTPSender{
 		baseURL:     parseBaseURL(address),
 		client:      &http.Client{},
 		retryDelays: retry.DefaultDelays,
-		key:         signatureKey,
+		key:         opts.SignatureKey,
+		publicKey:   opts.PublicKey,
 	}
 }
 
@@ -108,6 +123,12 @@ func (s *HTTPSender) sendMetrics(ctx context.Context, metrics []agentmodel.Metri
 	if err != nil {
 		return fmt.Errorf("compress metrics body: %w", err)
 	}
+	if s.publicKey != nil {
+		body, err = encryption.Encrypt(body, s.publicKey)
+		if err != nil {
+			return fmt.Errorf("encrypt metrics body: %w", err)
+		}
+	}
 
 	metricURL := *s.baseURL
 	metricURL.Path = strings.TrimRight(metricURL.Path, "/") + "/updates"
@@ -123,7 +144,11 @@ func (s *HTTPSender) doSendMetrics(ctx context.Context, metricURL string, body [
 		return fmt.Errorf("create metrics update request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Content-Encoding", compression.GzipEncoding)
+	contentEncoding := compression.GzipEncoding
+	if s.publicKey != nil {
+		contentEncoding += ", " + encryption.Encoding
+	}
+	req.Header.Set("Content-Encoding", contentEncoding)
 	req.Header.Set("Accept-Encoding", compression.GzipEncoding)
 	if s.key != "" {
 		req.Header.Set(signature.Header, signature.Sign(body, s.key))

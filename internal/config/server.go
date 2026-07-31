@@ -18,6 +18,7 @@ type ServerConfig struct {
 	Restore         bool
 	DatabaseDSN     string
 	Key             string
+	CryptoKey       string
 	AuditFile       string
 	AuditURL        string
 }
@@ -46,6 +47,7 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 	fs.BoolVar(&cfg.Restore, "r", cfg.Restore, "restore metrics from file storage on startup")
 	fs.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "database connection DSN")
 	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
+	fs.StringVar(&cfg.CryptoKey, "crypto-key", cfg.CryptoKey, "path to the private encryption key")
 	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit log file path")
 	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit log receiver URL")
 
@@ -79,6 +81,10 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 
 	if value, ok := os.LookupEnv("KEY"); ok {
 		cfg.Key = value
+	}
+
+	if value, ok := os.LookupEnv("CRYPTO_KEY"); ok {
+		cfg.CryptoKey = value
 	}
 
 	if value, ok := os.LookupEnv("AUDIT_FILE"); ok {

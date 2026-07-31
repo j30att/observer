@@ -20,6 +20,7 @@ func TestServerConfig(t *testing.T) {
 			assert.True(t, cfg.Restore)
 			assert.Empty(t, cfg.DatabaseDSN)
 			assert.Empty(t, cfg.Key)
+			assert.Empty(t, cfg.CryptoKey)
 			assert.Empty(t, cfg.AuditFile)
 			assert.Empty(t, cfg.AuditURL)
 		})
@@ -48,6 +49,7 @@ func TestServerConfig(t *testing.T) {
 				"-r=false",
 				"-d=postgres://user:password@example.com:5432/observer?sslmode=require",
 				"-k=flag-key",
+				"-crypto-key=/tmp/private.pem",
 				"--audit-file=/tmp/audit.log",
 				"--audit-url=https://audit.example.com/events",
 			})
@@ -59,6 +61,7 @@ func TestServerConfig(t *testing.T) {
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://user:password@example.com:5432/observer?sslmode=require", cfg.DatabaseDSN)
 			assert.Equal(t, "flag-key", cfg.Key)
+			assert.Equal(t, "/tmp/private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/events", cfg.AuditURL)
 		})
@@ -70,6 +73,7 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("RESTORE", "false")
 			t.Setenv("DATABASE_DSN", "postgres://env-dsn")
 			t.Setenv("KEY", "env-key")
+			t.Setenv("CRYPTO_KEY", "/tmp/env-private.pem")
 			t.Setenv("AUDIT_FILE", "/tmp/env-audit.log")
 			t.Setenv("AUDIT_URL", "https://audit.example.com/env")
 
@@ -82,6 +86,7 @@ func TestServerConfig(t *testing.T) {
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://env-dsn", cfg.DatabaseDSN)
 			assert.Equal(t, "env-key", cfg.Key)
+			assert.Equal(t, "/tmp/env-private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/env-audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/env", cfg.AuditURL)
 		})
@@ -93,6 +98,7 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("RESTORE", "false")
 			t.Setenv("DATABASE_DSN", "postgres://env-dsn")
 			t.Setenv("KEY", "env-key")
+			t.Setenv("CRYPTO_KEY", "/tmp/env-private.pem")
 			t.Setenv("AUDIT_FILE", "/tmp/env-audit.log")
 			t.Setenv("AUDIT_URL", "https://audit.example.com/env")
 
@@ -103,6 +109,7 @@ func TestServerConfig(t *testing.T) {
 				"-r=true",
 				"-d=postgres://flag-dsn",
 				"-k=flag-key",
+				"-crypto-key=/tmp/flag-private.pem",
 				"--audit-file=/tmp/flag-audit.log",
 				"--audit-url=https://audit.example.com/flag",
 			})
@@ -114,6 +121,7 @@ func TestServerConfig(t *testing.T) {
 			assert.False(t, cfg.Restore)
 			assert.Equal(t, "postgres://env-dsn", cfg.DatabaseDSN)
 			assert.Equal(t, "env-key", cfg.Key)
+			assert.Equal(t, "/tmp/env-private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/env-audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/env", cfg.AuditURL)
 		})

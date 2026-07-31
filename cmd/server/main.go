@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"database/sql"
 	stdlog "log"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"j30att/observer/internal/buildinfo"
 	"j30att/observer/internal/config"
+	"j30att/observer/internal/encryption"
 	"j30att/observer/internal/server/audit"
 	"j30att/observer/internal/server/controller"
 	"j30att/observer/internal/server/handlers/get"
@@ -40,6 +42,13 @@ func main() {
 	}
 
 	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
+	var privateKey *rsa.PrivateKey
+	if cfg.CryptoKey != "" {
+		privateKey, err = encryption.LoadPrivateKey(cfg.CryptoKey)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to load private encryption key")
+		}
+	}
 
 	var db *sql.DB
 	if cfg.DatabaseDSN != "" {
@@ -119,7 +128,10 @@ func main() {
 	defer closeAuditor()
 
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery, auditor)
-	r := router.NewRouter(metricController, logger, db, cfg.Key)
+	r := router.NewRouterWithOptions(metricController, logger, db, router.Options{
+		SignatureKey: cfg.Key,
+		PrivateKey:   privateKey,
+	})
 
 	server := &http.Server{
 		Addr:              cfg.Address,

@@ -1,6 +1,7 @@
 package router
 
 import (
+	"crypto/rsa"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -11,18 +12,32 @@ import (
 	"j30att/observer/internal/server/middlewares"
 )
 
+// Options contains optional HTTP transport security settings.
+type Options struct {
+	SignatureKey string
+	PrivateKey   *rsa.PrivateKey
+}
+
 // NewRouter wires the HTTP routes, middlewares, controller, and health check.
 func NewRouter(metricController *controller.MetricController, logger zerolog.Logger, db ping.Pinger, key ...string) http.Handler {
-	signatureKey := ""
+	var signatureKey string
 	if len(key) > 0 {
 		signatureKey = key[0]
 	}
 
+	return NewRouterWithOptions(metricController, logger, db, Options{SignatureKey: signatureKey})
+}
+
+// NewRouterWithOptions wires the HTTP routes with signing and encryption settings.
+func NewRouterWithOptions(metricController *controller.MetricController, logger zerolog.Logger, db ping.Pinger, opts Options) http.Handler {
 	r := chi.NewRouter()
 	r.Use(chimiddleware.StripSlashes)
 	r.Use(middlewares.Logger(logger))
-	if signatureKey != "" {
-		r.Use(middlewares.Signature(signatureKey))
+	if opts.SignatureKey != "" {
+		r.Use(middlewares.Signature(opts.SignatureKey))
+	}
+	if opts.PrivateKey != nil {
+		r.Use(middlewares.Decryption(opts.PrivateKey))
 	}
 	r.Use(middlewares.Gzip)
 	pingHandler := ping.New(db)

@@ -15,6 +15,7 @@ type AgentConfig struct {
 	PollInterval   time.Duration
 	ReportInterval time.Duration
 	Key            string
+	CryptoKey      string
 	RateLimit      int
 }
 
@@ -41,6 +42,7 @@ func ParseAgentConfig(args []string) (AgentConfig, error) {
 	fs.IntVar(&reportSeconds, "r", int(cfg.ReportInterval/time.Second), "report interval in seconds")
 	fs.IntVar(&pollSeconds, "p", int(cfg.PollInterval/time.Second), "poll interval in seconds")
 	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
+	fs.StringVar(&cfg.CryptoKey, "crypto-key", cfg.CryptoKey, "path to the public encryption key")
 	fs.IntVar(&cfg.RateLimit, "l", cfg.RateLimit, "maximum number of concurrent outgoing requests")
 
 	if err := fs.Parse(args); err != nil {
@@ -71,6 +73,10 @@ func ParseAgentConfig(args []string) (AgentConfig, error) {
 
 	if value, ok := os.LookupEnv("KEY"); ok {
 		cfg.Key = value
+	}
+
+	if value, ok := os.LookupEnv("CRYPTO_KEY"); ok {
+		cfg.CryptoKey = value
 	}
 
 	if reportSeconds < 0 {

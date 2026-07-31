@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"os"
 
 	"github.com/rs/zerolog"
@@ -11,6 +12,7 @@ import (
 	"j30att/observer/internal/agent/senders"
 	"j30att/observer/internal/buildinfo"
 	"j30att/observer/internal/config"
+	"j30att/observer/internal/encryption"
 )
 
 var (
@@ -28,12 +30,23 @@ func main() {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to parse agent config")
 	}
+
+	var publicKey *rsa.PublicKey
+	if cfg.CryptoKey != "" {
+		publicKey, err = encryption.LoadPublicKey(cfg.CryptoKey)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to load public encryption key")
+		}
+	}
 	store := repository.NewMetricsRepository()
 	metricCollectors := []agent.Collector{
 		collectors.NewRuntimeCollector(),
 		collectors.NewGopsutilCollector(),
 	}
-	sender := senders.NewHTTPSender(cfg.ServerAddress, cfg.Key)
+	sender := senders.NewHTTPSenderWithOptions(cfg.ServerAddress, senders.HTTPSenderOptions{
+		SignatureKey: cfg.Key,
+		PublicKey:    publicKey,
+	})
 	app := agent.New(cfg, store, metricCollectors, sender, logger)
 
 	if err := app.Run(context.Background()); err != nil {
