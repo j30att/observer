@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"errors"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/rs/zerolog"
 	"j30att/observer/internal/agent"
@@ -49,7 +52,12 @@ func main() {
 	})
 	app := agent.New(cfg, store, metricCollectors, sender, logger)
 
-	if err := app.Run(context.Background()); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
+
+	if err := app.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Fatal().Err(err).Msg("agent stopped")
 	}
+
+	logger.Info().Msg("agent stopped gracefully")
 }

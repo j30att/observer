@@ -4,9 +4,13 @@ import (
 	"context"
 	"crypto/rsa"
 	"database/sql"
-	stdlog "log"
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"j30att/observer/internal/buildinfo"
@@ -27,6 +31,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const gracefulShutdownTimeout = 30 * time.Second
+
 var (
 	buildVersion string
 	buildDate    string
@@ -35,18 +41,27 @@ var (
 
 func main() {
 	buildinfo.Print(os.Stdout, buildVersion, buildDate, buildCommit)
+	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
 
-	cfg, err := config.ParseServerConfig(os.Args[1:])
-	if err != nil {
-		stdlog.Fatal(err)
+	if err := runServer(os.Args[1:], logger); err != nil {
+		logger.Error().Err(err).Msg("server stopped with an error")
+		os.Exit(1)
 	}
 
-	logger := zerolog.New(os.Stdout).Level(zerolog.InfoLevel).With().Timestamp().Logger()
+	logger.Info().Msg("server stopped gracefully")
+}
+
+func runServer(args []string, logger zerolog.Logger) (runErr error) {
+	cfg, err := config.ParseServerConfig(args)
+	if err != nil {
+		return fmt.Errorf("parse server config: %w", err)
+	}
+
 	var privateKey *rsa.PrivateKey
 	if cfg.CryptoKey != "" {
 		privateKey, err = encryption.LoadPrivateKey(cfg.CryptoKey)
 		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to load private encryption key")
+			return fmt.Errorf("load private encryption key: %w", err)
 		}
 	}
 
@@ -54,9 +69,13 @@ func main() {
 	if cfg.DatabaseDSN != "" {
 		db, err = sql.Open("postgres", cfg.DatabaseDSN)
 		if err != nil {
-			logger.Fatal().Err(err).Msg("failed to open database")
+			return fmt.Errorf("open database: %w", err)
 		}
-		defer db.Close()
+		defer func() {
+			if err := db.Close(); err != nil {
+				runErr = errors.Join(runErr, fmt.Errorf("close database: %w", err))
+			}
+		}()
 
 		pingCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		err = db.PingContext(pingCtx)
@@ -64,9 +83,13 @@ func main() {
 		if err != nil {
 			logger.Error().Err(err).Msg("database is unavailable")
 		} else if err := migrations.Up(db); err != nil {
-			logger.Fatal().Err(err).Msg("failed to apply database migrations")
+			return fmt.Errorf("apply database migrations: %w", err)
 		}
 	}
+
+	var periodicSaver *storage.PeriodicSaver
+	var periodicSaverCancel context.CancelFunc
+	var periodicSaverWG sync.WaitGroup
 
 	var metricsRepo repository.MetricsRepository
 	if db != nil {
@@ -78,11 +101,11 @@ func main() {
 			var metrics []model.Metrics
 			fileStorage, metrics, err = storage.NewRestoredFileStorage(cfg.FileStoragePath, logger)
 			if err != nil {
-				logger.Fatal().Err(err).Msg("failed to restore metrics from file")
+				return fmt.Errorf("restore metrics from file: %w", err)
 			}
 
 			if err := repo.Restore(metrics); err != nil {
-				logger.Fatal().Err(err).Msg("failed to restore metrics repository")
+				return fmt.Errorf("restore metrics repository: %w", err)
 			}
 
 			logger.Info().Int("metrics_count", len(metrics)).Msg("restored metrics")
@@ -92,8 +115,14 @@ func main() {
 
 		metricsRepo = repo
 		if cfg.StoreInterval > 0 {
-			periodicSaver := storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, logger)
-			go periodicSaver.Run(context.Background())
+			var saverCtx context.Context
+			saverCtx, periodicSaverCancel = context.WithCancel(context.Background())
+			periodicSaver = storage.NewPeriodicSaver(cfg.StoreInterval, repo, fileStorage, logger)
+			periodicSaverWG.Add(1)
+			go func() {
+				defer periodicSaverWG.Done()
+				periodicSaver.Run(saverCtx)
+			}()
 		} else {
 			metricsRepo = repository.NewSyncPersistentRepository(repo, fileStorage)
 		}
@@ -116,16 +145,15 @@ func main() {
 		}
 		auditor = audit.NewSubject(logger, observers...)
 	}
-	closeAuditor := func() {
+	defer func() {
 		if auditor == nil {
 			return
 		}
 
 		if err := auditor.Close(); err != nil {
-			logger.Error().Err(err).Msg("failed to close audit subject")
+			runErr = errors.Join(runErr, fmt.Errorf("close audit subject: %w", err))
 		}
-	}
-	defer closeAuditor()
+	}()
 
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery, auditor)
 	r := router.NewRouterWithOptions(metricController, logger, db, router.Options{
@@ -142,8 +170,61 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	if err := server.ListenAndServe(); err != nil {
-		closeAuditor()
-		logger.Fatal().Err(err).Msg("server stopped")
+	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
+
+	serveErr := serveUntilShutdown(shutdownCtx, server, server.ListenAndServe, gracefulShutdownTimeout)
+	shutdownErr := serveErr
+
+	if err := stopPeriodicSaver(periodicSaverCancel, &periodicSaverWG, periodicSaver); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("save metrics during shutdown: %w", err))
 	}
+
+	if shutdownErr != nil {
+		return shutdownErr
+	}
+
+	return nil
+}
+
+func serveUntilShutdown(ctx context.Context, server *http.Server, serve func() error, shutdownTimeout time.Duration) error {
+	serveErrors := make(chan error, 1)
+	go func() {
+		serveErrors <- serve()
+	}()
+
+	select {
+	case err := <-serveErrors:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+	}
+
+	gracefulCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := server.Shutdown(gracefulCtx); err != nil {
+		if closeErr := server.Close(); closeErr != nil {
+			return errors.Join(fmt.Errorf("shutdown HTTP server: %w", err), fmt.Errorf("close HTTP server: %w", closeErr))
+		}
+		return fmt.Errorf("shutdown HTTP server: %w", err)
+	}
+
+	if err := <-serveErrors; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	return nil
+}
+
+func stopPeriodicSaver(cancel context.CancelFunc, wg *sync.WaitGroup, saver *storage.PeriodicSaver) error {
+	if cancel == nil || saver == nil {
+		return nil
+	}
+
+	cancel()
+	wg.Wait()
+
+	return saver.Save(context.Background())
 }

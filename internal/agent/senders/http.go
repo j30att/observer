@@ -35,6 +35,8 @@ type HTTPSenderOptions struct {
 	PublicKey    *rsa.PublicKey
 }
 
+const requestTimeout = 10 * time.Second
+
 // NewHTTPSender creates an HTTP sender for the given server address.
 // When a key is provided, requests are signed with HashSHA256.
 func NewHTTPSender(address string, key ...string) *HTTPSender {
@@ -50,7 +52,7 @@ func NewHTTPSender(address string, key ...string) *HTTPSender {
 func NewHTTPSenderWithOptions(address string, opts HTTPSenderOptions) *HTTPSender {
 	return &HTTPSender{
 		baseURL:     parseBaseURL(address),
-		client:      &http.Client{},
+		client:      &http.Client{Timeout: requestTimeout},
 		retryDelays: retry.DefaultDelays,
 		key:         opts.SignatureKey,
 		publicKey:   opts.PublicKey,

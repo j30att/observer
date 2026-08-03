@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -10,6 +12,10 @@ import (
 	"j30att/observer/internal/agent/repository"
 	"j30att/observer/internal/config"
 )
+
+const gracefulShutdownTimeout = 30 * time.Second
+
+var errGracefulShutdownTimeout = errors.New("agent graceful shutdown timed out")
 
 // Collector gathers metrics and stores them in the agent repository.
 type Collector interface {
@@ -85,39 +91,62 @@ func (a *Agent) Poll() error {
 
 // Report sends the current metrics snapshot once.
 func (a *Agent) Report(ctx context.Context) error {
-	return a.sender.Send(ctx, a.store.Snapshot())
+	return a.sendSnapshot(ctx, a.store.TakeSnapshot())
 }
 
 // Run starts polling and reporting loops until the context is cancelled.
 func (a *Agent) Run(ctx context.Context) error {
-	var wg sync.WaitGroup
 	reports := make(chan model.MetricsSnapshot, a.rateLimit)
+	sendCtx, cancelSends := context.WithCancelCause(context.WithoutCancel(ctx))
+	defer cancelSends(nil)
 
+	var workerWG sync.WaitGroup
+	for range a.rateLimit {
+		workerWG.Add(1)
+		go func() {
+			defer workerWG.Done()
+			a.runReportWorker(sendCtx, reports)
+		}()
+	}
+
+	var pollWG sync.WaitGroup
 	for _, collector := range a.collectors {
-		wg.Add(1)
+		pollWG.Add(1)
 		go func(collector Collector) {
-			defer wg.Done()
+			defer pollWG.Done()
 			a.runPollLoop(ctx, collector)
 		}(collector)
 	}
 
-	wg.Add(1)
+	var reportWG sync.WaitGroup
+	reportWG.Add(1)
 	go func() {
-		defer wg.Done()
-		defer close(reports)
+		defer reportWG.Done()
 		a.runReportLoop(ctx, reports)
 	}()
 
-	for range a.rateLimit {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			a.runReportWorker(ctx, reports)
-		}()
+	<-ctx.Done()
+	shutdownTimer := time.AfterFunc(gracefulShutdownTimeout, func() {
+		cancelSends(errGracefulShutdownTimeout)
+	})
+	defer shutdownTimer.Stop()
+
+	if !waitGroup(sendCtx, &pollWG) || !waitGroup(sendCtx, &reportWG) {
+		return context.Cause(sendCtx)
 	}
 
-	<-ctx.Done()
-	wg.Wait()
+	close(reports)
+	if !waitGroup(sendCtx, &workerWG) {
+		return context.Cause(sendCtx)
+	}
+
+	if err := a.Report(sendCtx); err != nil {
+		if cause := context.Cause(sendCtx); cause != nil {
+			return cause
+		}
+		return fmt.Errorf("send final metrics report: %w", err)
+	}
+
 	return ctx.Err()
 }
 
@@ -147,9 +176,11 @@ func (a *Agent) runReportLoop(ctx context.Context, reports chan<- model.MetricsS
 		default:
 		}
 
+		snapshot := a.store.TakeSnapshot()
 		select {
-		case reports <- a.store.Snapshot():
+		case reports <- snapshot:
 		case <-ctx.Done():
+			a.store.RestoreCounters(snapshot.Counters)
 			return
 		}
 
@@ -160,19 +191,20 @@ func (a *Agent) runReportLoop(ctx context.Context, reports chan<- model.MetricsS
 }
 
 func (a *Agent) runReportWorker(ctx context.Context, reports <-chan model.MetricsSnapshot) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case snapshot, ok := <-reports:
-			if !ok {
-				return
-			}
-			if err := a.sender.Send(ctx, snapshot); err != nil {
-				a.logger.Error().Err(err).Msg("failed to report metrics")
-			}
+	for snapshot := range reports {
+		if err := a.sendSnapshot(ctx, snapshot); err != nil {
+			a.logger.Error().Err(err).Msg("failed to report metrics")
 		}
 	}
+}
+
+func (a *Agent) sendSnapshot(ctx context.Context, snapshot model.MetricsSnapshot) error {
+	if err := a.sender.Send(ctx, snapshot); err != nil {
+		a.store.RestoreCounters(snapshot.Counters)
+		return err
+	}
+
+	return nil
 }
 
 func sleepOrDone(ctx context.Context, duration time.Duration) bool {
@@ -189,5 +221,20 @@ func sleepOrDone(ctx context.Context, duration time.Duration) bool {
 		return false
 	case <-timer.C:
 		return true
+	}
+}
+
+func waitGroup(ctx context.Context, wg *sync.WaitGroup) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
