@@ -23,7 +23,7 @@ func Decryption(privateKey *rsa.PrivateKey) func(http.Handler) http.Handler {
 			body, err := io.ReadAll(requestBody)
 			_ = requestBody.Close()
 			if err != nil {
-				http.Error(w, "failed to read encrypted request body", http.StatusBadRequest)
+				http.Error(w, "failed to read encrypted request body", http.StatusInternalServerError)
 				return
 			}
 			if len(body) == 0 {

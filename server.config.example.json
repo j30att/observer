@@ -1,0 +1,11 @@
+{
+  "address": "localhost:8080",
+  "restore": true,
+  "store_interval": "300s",
+  "store_file": "/path/to/file.db",
+  "database_dsn": "",
+  "key": "",
+  "crypto_key": "/path/to/private-key.pem",
+  "audit_file": "/path/to/audit.log",
+  "audit_url": "https://audit.example.com/events"
+}

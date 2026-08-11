@@ -26,3 +26,7 @@ vendor/
 
 # Local environment
 .env
+
+# Local JSON configs
+server.config.json
+agent.config.json

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -100,28 +100,25 @@ func (a *Agent) Run(ctx context.Context) error {
 	sendCtx, cancelSends := context.WithCancelCause(context.WithoutCancel(ctx))
 	defer cancelSends(nil)
 
-	var workerWG sync.WaitGroup
+	workerDone, workerFinished := completionChannel(a.rateLimit)
 	for range a.rateLimit {
-		workerWG.Add(1)
 		go func() {
-			defer workerWG.Done()
+			defer workerFinished()
 			a.runReportWorker(sendCtx, reports)
 		}()
 	}
 
-	var pollWG sync.WaitGroup
+	pollDone, pollFinished := completionChannel(len(a.collectors))
 	for _, collector := range a.collectors {
-		pollWG.Add(1)
 		go func(collector Collector) {
-			defer pollWG.Done()
+			defer pollFinished()
 			a.runPollLoop(ctx, collector)
 		}(collector)
 	}
 
-	var reportWG sync.WaitGroup
-	reportWG.Add(1)
+	reportDone, reportFinished := completionChannel(1)
 	go func() {
-		defer reportWG.Done()
+		defer reportFinished()
 		a.runReportLoop(ctx, reports)
 	}()
 
@@ -131,12 +128,12 @@ func (a *Agent) Run(ctx context.Context) error {
 	})
 	defer shutdownTimer.Stop()
 
-	if !waitGroup(sendCtx, &pollWG) || !waitGroup(sendCtx, &reportWG) {
+	if !waitDone(sendCtx, pollDone) || !waitDone(sendCtx, reportDone) {
 		return context.Cause(sendCtx)
 	}
 
 	close(reports)
-	if !waitGroup(sendCtx, &workerWG) {
+	if !waitDone(sendCtx, workerDone) {
 		return context.Cause(sendCtx)
 	}
 
@@ -224,17 +221,28 @@ func sleepOrDone(ctx context.Context, duration time.Duration) bool {
 	}
 }
 
-func waitGroup(ctx context.Context, wg *sync.WaitGroup) bool {
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
+func waitDone(ctx context.Context, done <-chan struct{}) bool {
 	select {
 	case <-done:
 		return true
 	case <-ctx.Done():
 		return false
+	}
+}
+
+func completionChannel(count int) (<-chan struct{}, func()) {
+	done := make(chan struct{})
+	if count <= 0 {
+		close(done)
+		return done, func() {}
+	}
+
+	var remaining atomic.Int64
+	remaining.Store(int64(count))
+
+	return done, func() {
+		if remaining.Add(-1) == 0 {
+			close(done)
+		}
 	}
 }

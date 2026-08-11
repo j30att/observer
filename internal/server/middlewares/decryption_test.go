@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,16 @@ import (
 	"j30att/observer/internal/server/middlewares"
 	"j30att/observer/internal/signature"
 )
+
+type errReadCloser struct{}
+
+func (errReadCloser) Read([]byte) (int, error) {
+	return 0, errors.New("read failed")
+}
+
+func (errReadCloser) Close() error {
+	return nil
+}
 
 func TestDecryption(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -71,6 +82,21 @@ func TestDecryption(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("Ошибка чтения тела запроса", func(t *testing.T) {
+		handler := middlewares.Decryption(privateKey)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		req := httptest.NewRequest(http.MethodPost, "/updates", nil)
+		req.Body = errReadCloser{}
+		req.ContentLength = 1
+		req.Header.Set("Content-Encoding", encryption.Encoding)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 
 	t.Run("Должен пропустить запрос с пустым телом", func(t *testing.T) {
