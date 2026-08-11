@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	agentmodel "j30att/observer/internal/agent/model"
+	"j30att/observer/internal/encryption"
 	"j30att/observer/internal/signature"
 )
 
@@ -64,6 +67,42 @@ func TestHTTPSender(t *testing.T) {
 					t.Fatalf("unexpected metric id: %s", metric.ID)
 				}
 			}
+		})
+
+		t.Run("Должен зашифровать сжатое сообщение и подписать ciphertext", func(t *testing.T) {
+			privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+			require.NoError(t, err)
+
+			var request []agentmodel.Metrics
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "gzip, rsa", r.Header.Get("Content-Encoding"))
+
+				encryptedBody, err := io.ReadAll(r.Body)
+				require.NoError(t, err)
+				assert.Equal(t, signature.Sign(encryptedBody, "secret-key"), r.Header.Get(signature.Header))
+
+				compressedBody, err := encryption.Decrypt(encryptedBody, privateKey)
+				require.NoError(t, err)
+				body := readGzipBody(t, io.NopCloser(bytes.NewReader(compressedBody)))
+				require.NoError(t, json.Unmarshal(body, &request))
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+
+			sender := NewHTTPSenderWithOptions(server.URL, HTTPSenderOptions{
+				SignatureKey: "secret-key",
+				PublicKey:    &privateKey.PublicKey,
+			})
+			snapshot := agentmodel.NewMetricsSnapshot()
+			snapshot.Gauges["Alloc"] = 12.5
+
+			err = sender.Send(context.Background(), snapshot)
+
+			require.NoError(t, err)
+			require.Len(t, request, 1)
+			assert.Equal(t, "Alloc", request[0].ID)
 		})
 
 		t.Run("Должен вернуть ошибку если server вернул неожиданный status", func(t *testing.T) {

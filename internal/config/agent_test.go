@@ -18,6 +18,7 @@ func TestAgentConfig(t *testing.T) {
 			assert.Equal(t, 2*time.Second, cfg.PollInterval)
 			assert.Equal(t, 10*time.Second, cfg.ReportInterval)
 			assert.Empty(t, cfg.Key)
+			assert.Empty(t, cfg.CryptoKey)
 			assert.Equal(t, 1, cfg.RateLimit)
 		})
 	})
@@ -35,13 +36,21 @@ func TestAgentConfig(t *testing.T) {
 		})
 
 		t.Run("Должен переопределить values из flags", func(t *testing.T) {
-			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5", "-k=flag-key", "-l=4"})
+			cfg, err := config.ParseAgentConfig([]string{
+				"-a=127.0.0.1:9000",
+				"-r=15",
+				"-p=5",
+				"-k=flag-key",
+				"-crypto-key=/tmp/public.pem",
+				"-l=4",
+			})
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9000", cfg.ServerAddress)
 			assert.Equal(t, 5*time.Second, cfg.PollInterval)
 			assert.Equal(t, 15*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "flag-key", cfg.Key)
+			assert.Equal(t, "/tmp/public.pem", cfg.CryptoKey)
 			assert.Equal(t, 4, cfg.RateLimit)
 		})
 
@@ -50,6 +59,7 @@ func TestAgentConfig(t *testing.T) {
 			t.Setenv("REPORT_INTERVAL", "20")
 			t.Setenv("POLL_INTERVAL", "7")
 			t.Setenv("KEY", "env-key")
+			t.Setenv("CRYPTO_KEY", "/tmp/env-public.pem")
 			t.Setenv("RATE_LIMIT", "5")
 
 			cfg, err := config.ParseAgentConfig(nil)
@@ -59,6 +69,7 @@ func TestAgentConfig(t *testing.T) {
 			assert.Equal(t, 7*time.Second, cfg.PollInterval)
 			assert.Equal(t, 20*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "env-key", cfg.Key)
+			assert.Equal(t, "/tmp/env-public.pem", cfg.CryptoKey)
 			assert.Equal(t, 5, cfg.RateLimit)
 		})
 
@@ -67,15 +78,24 @@ func TestAgentConfig(t *testing.T) {
 			t.Setenv("REPORT_INTERVAL", "20")
 			t.Setenv("POLL_INTERVAL", "7")
 			t.Setenv("KEY", "env-key")
+			t.Setenv("CRYPTO_KEY", "/tmp/env-public.pem")
 			t.Setenv("RATE_LIMIT", "5")
 
-			cfg, err := config.ParseAgentConfig([]string{"-a=127.0.0.1:9000", "-r=15", "-p=5", "-k=flag-key", "-l=4"})
+			cfg, err := config.ParseAgentConfig([]string{
+				"-a=127.0.0.1:9000",
+				"-r=15",
+				"-p=5",
+				"-k=flag-key",
+				"-crypto-key=/tmp/flag-public.pem",
+				"-l=4",
+			})
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.ServerAddress)
 			assert.Equal(t, 7*time.Second, cfg.PollInterval)
 			assert.Equal(t, 20*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "env-key", cfg.Key)
+			assert.Equal(t, "/tmp/env-public.pem", cfg.CryptoKey)
 			assert.Equal(t, 5, cfg.RateLimit)
 		})
 

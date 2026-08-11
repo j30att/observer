@@ -55,4 +55,31 @@ func TestMetricsRepository(t *testing.T) {
 			assert.Equal(t, 10.5, nextSnapshot.Gauges["Alloc"])
 		})
 	})
+
+	t.Run("Тест извлечения snapshot", func(t *testing.T) {
+		t.Run("Должен сбросить counters и сохранить gauges", func(t *testing.T) {
+			setup(t)
+			repo.SaveGauge("Alloc", 10.5)
+			repo.SaveCounter("PollCount", 2)
+
+			taken := repo.TakeSnapshot()
+			after := repo.Snapshot()
+
+			assert.Equal(t, 10.5, taken.Gauges["Alloc"])
+			assert.EqualValues(t, 2, taken.Counters["PollCount"])
+			assert.Equal(t, 10.5, after.Gauges["Alloc"])
+			assert.Empty(t, after.Counters)
+		})
+
+		t.Run("Должен вернуть counters неуспешного отчёта", func(t *testing.T) {
+			setup(t)
+			repo.SaveCounter("PollCount", 2)
+			taken := repo.TakeSnapshot()
+			repo.SaveCounter("PollCount", 1)
+
+			repo.RestoreCounters(taken.Counters)
+
+			assert.EqualValues(t, 3, repo.Snapshot().Counters["PollCount"])
+		})
+	})
 }
