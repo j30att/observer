@@ -152,6 +152,9 @@ func (s *HTTPSender) doSendMetrics(ctx context.Context, metricURL string, body [
 	}
 	req.Header.Set("Content-Encoding", contentEncoding)
 	req.Header.Set("Accept-Encoding", compression.GzipEncoding)
+	if realIP, err := outboundIP(ctx, metricURL); err == nil {
+		req.Header.Set("X-Real-IP", realIP)
+	}
 	if s.key != "" {
 		req.Header.Set(signature.Header, signature.Sign(body, s.key))
 	}
@@ -173,6 +176,34 @@ func (s *HTTPSender) doSendMetrics(ctx context.Context, metricURL string, body [
 	}
 
 	return nil
+}
+
+func outboundIP(ctx context.Context, rawURL string) (string, error) {
+	metricURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+
+	address := metricURL.Host
+	if _, _, err := net.SplitHostPort(address); err != nil {
+		address = net.JoinHostPort(address, "80")
+	}
+
+	dialer := net.Dialer{}
+	conn, err := dialer.DialContext(ctx, "udp", address)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = conn.Close()
+	}()
+
+	addr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok || addr.IP == nil {
+		return "", fmt.Errorf("unexpected local address: %s", conn.LocalAddr())
+	}
+
+	return addr.IP.String(), nil
 }
 
 func isRetriableTransportError(err error) bool {

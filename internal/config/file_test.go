@@ -80,7 +80,8 @@ func TestServerFileConfig(t *testing.T) {
 			"key": "file-key",
 			"crypto_key": "/tmp/file-private.pem",
 			"audit_file": "/tmp/file-audit.log",
-			"audit_url": "https://audit.example.com/file"
+			"audit_url": "https://audit.example.com/file",
+			"trusted_subnet": "192.168.1.0/24"
 		}`)
 
 		cfg, err := config.ParseServerConfig([]string{"-config", path})
@@ -95,6 +96,7 @@ func TestServerFileConfig(t *testing.T) {
 		assert.Equal(t, "/tmp/file-private.pem", cfg.CryptoKey)
 		assert.Equal(t, "/tmp/file-audit.log", cfg.AuditFile)
 		assert.Equal(t, "https://audit.example.com/file", cfg.AuditURL)
+		assert.Equal(t, "192.168.1.0/24", cfg.TrustedSubnet)
 	})
 
 	t.Run("CONFIG overrides config flag", func(t *testing.T) {
@@ -114,11 +116,13 @@ func TestServerFileConfig(t *testing.T) {
 			"restore": true,
 			"store_interval": "30s",
 			"store_file": "/tmp/file.db",
-			"database_dsn": "postgres://file-dsn"
+			"database_dsn": "postgres://file-dsn",
+			"trusted_subnet": "192.168.1.0/24"
 		}`)
 		t.Setenv("ADDRESS", "from-env:8080")
 		t.Setenv("STORE_INTERVAL", "3")
 		t.Setenv("STORE_FILE", "/tmp/env.db")
+		t.Setenv("TRUSTED_SUBNET", "10.0.0.0/8")
 
 		cfg, err := config.ParseServerConfig([]string{
 			"-c=" + path,
@@ -127,6 +131,7 @@ func TestServerFileConfig(t *testing.T) {
 			"-f=/tmp/flag.db",
 			"-r=false",
 			"-d=postgres://flag-dsn",
+			"-t=172.16.0.0/12",
 		})
 
 		require.NoError(t, err)
@@ -135,6 +140,7 @@ func TestServerFileConfig(t *testing.T) {
 		assert.Equal(t, "/tmp/env.db", cfg.FileStoragePath)
 		assert.False(t, cfg.Restore)
 		assert.Equal(t, "postgres://flag-dsn", cfg.DatabaseDSN)
+		assert.Equal(t, "10.0.0.0/8", cfg.TrustedSubnet)
 	})
 }
 

@@ -121,6 +121,89 @@ func TestMetricController(t *testing.T) {
 			assert.EqualValues(t, 2, *counter.Delta)
 		})
 
+		t.Run("Должен принять update из trusted subnet", func(t *testing.T) {
+			setup(t)
+			r = router.NewRouterWithOptions(
+				controller.NewMetricController(update.New(repo), get.New(repo), getlist.New(repo)),
+				testLogger,
+				nil,
+				router.Options{TrustedSubnet: "192.168.1.0/24"},
+			)
+
+			req := newJSONRequest(t, http.MethodPost, "/updates", []map[string]any{
+				{"id": "Alloc", "type": "gauge", "value": 12.5},
+			})
+			req.Header.Set("X-Real-IP", "192.168.1.42")
+			rec := httptest.NewRecorder()
+
+			r.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+		})
+
+		t.Run("Должен отклонить update вне trusted subnet", func(t *testing.T) {
+			setup(t)
+			r = router.NewRouterWithOptions(
+				controller.NewMetricController(update.New(repo), get.New(repo), getlist.New(repo)),
+				testLogger,
+				nil,
+				router.Options{TrustedSubnet: "192.168.1.0/24"},
+			)
+
+			req := newJSONRequest(t, http.MethodPost, "/updates", []map[string]any{
+				{"id": "Alloc", "type": "gauge", "value": 12.5},
+			})
+			req.Header.Set("X-Real-IP", "10.0.0.42")
+			rec := httptest.NewRecorder()
+
+			r.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusForbidden, rec.Code)
+		})
+
+		t.Run("Должен проверять trusted subnet до подписи запроса", func(t *testing.T) {
+			setup(t)
+			r = router.NewRouterWithOptions(
+				controller.NewMetricController(update.New(repo), get.New(repo), getlist.New(repo)),
+				testLogger,
+				nil,
+				router.Options{
+					SignatureKey:  "secret-key",
+					TrustedSubnet: "192.168.1.0/24",
+				},
+			)
+
+			req := newJSONRequest(t, http.MethodPost, "/updates", []map[string]any{
+				{"id": "Alloc", "type": "gauge", "value": 12.5},
+			})
+			req.Header.Set("X-Real-IP", "10.0.0.42")
+			req.Header.Set(signature.Header, "bad-signature")
+			rec := httptest.NewRecorder()
+
+			r.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusForbidden, rec.Code)
+		})
+
+		t.Run("Должен отклонить update без X-Real-IP при trusted subnet", func(t *testing.T) {
+			setup(t)
+			r = router.NewRouterWithOptions(
+				controller.NewMetricController(update.New(repo), get.New(repo), getlist.New(repo)),
+				testLogger,
+				nil,
+				router.Options{TrustedSubnet: "192.168.1.0/24"},
+			)
+
+			req := newJSONRequest(t, http.MethodPost, "/updates", []map[string]any{
+				{"id": "Alloc", "type": "gauge", "value": 12.5},
+			})
+			rec := httptest.NewRecorder()
+
+			r.ServeHTTP(rec, req)
+
+			assert.Equal(t, http.StatusForbidden, rec.Code)
+		})
+
 		t.Run("Должен отправить audit event после успешного update", func(t *testing.T) {
 			repo = repository.NewMetricsRepository()
 			updateMetricCommand := update.New(repo)

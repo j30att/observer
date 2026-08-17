@@ -157,8 +157,9 @@ func runServer(args []string, logger zerolog.Logger) (runErr error) {
 
 	metricController := controller.NewMetricController(updateMetricCommand, getMetricQuery, listMetricsQuery, auditor)
 	r := router.NewRouterWithOptions(metricController, logger, db, router.Options{
-		SignatureKey: cfg.Key,
-		PrivateKey:   privateKey,
+		SignatureKey:  cfg.Key,
+		PrivateKey:    privateKey,
+		TrustedSubnet: cfg.TrustedSubnet,
 	})
 
 	server := &http.Server{

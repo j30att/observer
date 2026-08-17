@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -22,6 +24,7 @@ type ServerConfig struct {
 	CryptoKey       string
 	AuditFile       string
 	AuditURL        string
+	TrustedSubnet   string
 }
 
 type serverFileConfig struct {
@@ -34,6 +37,7 @@ type serverFileConfig struct {
 	CryptoKey     *string `json:"crypto_key"`
 	AuditFile     *string `json:"audit_file"`
 	AuditURL      *string `json:"audit_url"`
+	TrustedSubnet *string `json:"trusted_subnet"`
 }
 
 // NewServerConfig returns the default server configuration.
@@ -113,6 +117,10 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		cfg.AuditURL = value
 	}
 
+	if value, ok := os.LookupEnv("TRUSTED_SUBNET"); ok {
+		cfg.TrustedSubnet = value
+	}
+
 	if cfg.StoreInterval < 0 {
 		return ServerConfig{}, fmt.Errorf("invalid store interval value %d: interval must be non-negative seconds", int(cfg.StoreInterval/time.Second))
 	}
@@ -121,6 +129,13 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		parsedURL, err := url.ParseRequestURI(cfg.AuditURL)
 		if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
 			return ServerConfig{}, fmt.Errorf("invalid audit URL %q: full URL with scheme and host is required", cfg.AuditURL)
+		}
+	}
+
+	cfg.TrustedSubnet = strings.TrimSpace(cfg.TrustedSubnet)
+	if cfg.TrustedSubnet != "" {
+		if _, err := netip.ParsePrefix(cfg.TrustedSubnet); err != nil {
+			return ServerConfig{}, fmt.Errorf("invalid trusted subnet %q: %w", cfg.TrustedSubnet, err)
 		}
 	}
 
@@ -142,6 +157,7 @@ func parseServerFlags(cfg *ServerConfig, args []string) (string, error) {
 	fs.StringVar(&cfg.CryptoKey, "crypto-key", cfg.CryptoKey, "path to the private encryption key")
 	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit log file path")
 	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit log receiver URL")
+	fs.StringVar(&cfg.TrustedSubnet, "t", cfg.TrustedSubnet, "trusted agent subnet in CIDR notation")
 	fs.StringVar(&configPath, "c", configPath, "path to the JSON configuration file")
 	fs.StringVar(&configPath, "config", configPath, "path to the JSON configuration file")
 
@@ -198,6 +214,9 @@ func loadServerFile(path string, cfg *ServerConfig) error {
 	}
 	if fileCfg.AuditURL != nil {
 		cfg.AuditURL = *fileCfg.AuditURL
+	}
+	if fileCfg.TrustedSubnet != nil {
+		cfg.TrustedSubnet = *fileCfg.TrustedSubnet
 	}
 
 	return nil

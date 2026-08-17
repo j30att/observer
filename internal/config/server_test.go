@@ -23,6 +23,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Empty(t, cfg.CryptoKey)
 			assert.Empty(t, cfg.AuditFile)
 			assert.Empty(t, cfg.AuditURL)
+			assert.Empty(t, cfg.TrustedSubnet)
 		})
 	})
 
@@ -52,6 +53,7 @@ func TestServerConfig(t *testing.T) {
 				"-crypto-key=/tmp/private.pem",
 				"--audit-file=/tmp/audit.log",
 				"--audit-url=https://audit.example.com/events",
+				"-t=192.168.1.0/24",
 			})
 
 			require.NoError(t, err)
@@ -64,6 +66,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/events", cfg.AuditURL)
+			assert.Equal(t, "192.168.1.0/24", cfg.TrustedSubnet)
 		})
 
 		t.Run("Должен переопределить values из environment", func(t *testing.T) {
@@ -76,6 +79,7 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("CRYPTO_KEY", "/tmp/env-private.pem")
 			t.Setenv("AUDIT_FILE", "/tmp/env-audit.log")
 			t.Setenv("AUDIT_URL", "https://audit.example.com/env")
+			t.Setenv("TRUSTED_SUBNET", "10.0.0.0/8")
 
 			cfg, err := config.ParseServerConfig(nil)
 
@@ -89,6 +93,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/env-private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/env-audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/env", cfg.AuditURL)
+			assert.Equal(t, "10.0.0.0/8", cfg.TrustedSubnet)
 		})
 
 		t.Run("Должен отдать приоритет environment над flags", func(t *testing.T) {
@@ -101,6 +106,7 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("CRYPTO_KEY", "/tmp/env-private.pem")
 			t.Setenv("AUDIT_FILE", "/tmp/env-audit.log")
 			t.Setenv("AUDIT_URL", "https://audit.example.com/env")
+			t.Setenv("TRUSTED_SUBNET", "10.0.0.0/8")
 
 			cfg, err := config.ParseServerConfig([]string{
 				"-a=127.0.0.1:9000",
@@ -112,6 +118,7 @@ func TestServerConfig(t *testing.T) {
 				"-crypto-key=/tmp/flag-private.pem",
 				"--audit-file=/tmp/flag-audit.log",
 				"--audit-url=https://audit.example.com/flag",
+				"-t=192.168.1.0/24",
 			})
 
 			require.NoError(t, err)
@@ -124,6 +131,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/env-private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/env-audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/env", cfg.AuditURL)
+			assert.Equal(t, "10.0.0.0/8", cfg.TrustedSubnet)
 		})
 
 		t.Run("Ошибка, неизвестный flag", func(t *testing.T) {
@@ -166,6 +174,12 @@ func TestServerConfig(t *testing.T) {
 			_, err := config.ParseServerConfig([]string{"--audit-url=localhost:9000/audit"})
 
 			require.EqualError(t, err, `invalid audit URL "localhost:9000/audit": full URL with scheme and host is required`)
+		})
+
+		t.Run("Ошибка, невалидная trusted subnet", func(t *testing.T) {
+			_, err := config.ParseServerConfig([]string{"-t=192.168.1.0"})
+
+			require.ErrorContains(t, err, `invalid trusted subnet "192.168.1.0"`)
 		})
 	})
 }

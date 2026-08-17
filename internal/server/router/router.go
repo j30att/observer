@@ -14,8 +14,9 @@ import (
 
 // Options contains optional HTTP transport security settings.
 type Options struct {
-	SignatureKey string
-	PrivateKey   *rsa.PrivateKey
+	SignatureKey  string
+	PrivateKey    *rsa.PrivateKey
+	TrustedSubnet string
 }
 
 // NewRouter wires the HTTP routes, middlewares, controller, and health check.
@@ -33,6 +34,7 @@ func NewRouterWithOptions(metricController *controller.MetricController, logger 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.StripSlashes)
 	r.Use(middlewares.Logger(logger))
+	r.Use(middlewares.TrustedSubnetForMetricUpdates(opts.TrustedSubnet))
 	if opts.SignatureKey != "" {
 		r.Use(middlewares.Signature(opts.SignatureKey))
 	}
@@ -42,11 +44,11 @@ func NewRouterWithOptions(metricController *controller.MetricController, logger 
 	r.Use(middlewares.Gzip)
 	pingHandler := ping.New(db)
 	r.Get("/ping", pingHandler.Ping)
-	r.Post("/updates", metricController.UpdateMetricsJSON)
-	r.Post("/update", metricController.UpdateMetricJSON)
 	r.Post("/value", metricController.GetMetricJSON)
-	r.Post("/update/{type}/{name}/{value}", metricController.UpdateMetric)
 	r.Get("/value/{type}/{name}", metricController.GetMetric)
 	r.Get("/", metricController.ListMetrics)
+	r.Post("/updates", metricController.UpdateMetricsJSON)
+	r.Post("/update", metricController.UpdateMetricJSON)
+	r.Post("/update/{type}/{name}/{value}", metricController.UpdateMetric)
 	return r
 }
