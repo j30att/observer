@@ -46,10 +46,24 @@ func main() {
 		collectors.NewRuntimeCollector(),
 		collectors.NewGopsutilCollector(),
 	}
-	sender := senders.NewHTTPSenderWithOptions(cfg.ServerAddress, senders.HTTPSenderOptions{
-		SignatureKey: cfg.Key,
-		PublicKey:    publicKey,
-	})
+	var sender agent.Sender
+	if cfg.GRPCAddress != "" {
+		grpcSender, err := senders.NewGRPCSender(cfg.GRPCAddress)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to create grpc sender")
+		}
+		defer func() {
+			if err := grpcSender.Close(); err != nil {
+				logger.Error().Err(err).Msg("failed to close grpc sender")
+			}
+		}()
+		sender = grpcSender
+	} else {
+		sender = senders.NewHTTPSenderWithOptions(cfg.ServerAddress, senders.HTTPSenderOptions{
+			SignatureKey: cfg.Key,
+			PublicKey:    publicKey,
+		})
+	}
 	app := agent.New(cfg, store, metricCollectors, sender, logger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)

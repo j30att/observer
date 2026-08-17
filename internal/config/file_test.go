@@ -15,6 +15,7 @@ func TestAgentFileConfig(t *testing.T) {
 	t.Run("loads every option from short config flag", func(t *testing.T) {
 		path := writeConfigFile(t, `{
 			"address": "agent-file:8080",
+			"grpc_address": "agent-file:3200",
 			"report_interval": "1.5s",
 			"poll_interval": "750ms",
 			"key": "file-key",
@@ -26,6 +27,7 @@ func TestAgentFileConfig(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "agent-file:8080", cfg.ServerAddress)
+		assert.Equal(t, "agent-file:3200", cfg.GRPCAddress)
 		assert.Equal(t, 1500*time.Millisecond, cfg.ReportInterval)
 		assert.Equal(t, 750*time.Millisecond, cfg.PollInterval)
 		assert.Equal(t, "file-key", cfg.Key)
@@ -46,16 +48,19 @@ func TestAgentFileConfig(t *testing.T) {
 	t.Run("flags and environment override file", func(t *testing.T) {
 		path := writeConfigFile(t, `{
 			"address": "from-file:8080",
+			"grpc_address": "from-file:3200",
 			"report_interval": "30s",
 			"poll_interval": "20s",
 			"crypto_key": "/tmp/file.pem"
 		}`)
 		t.Setenv("ADDRESS", "from-env:8080")
+		t.Setenv("GRPC_ADDRESS", "from-env:3300")
 		t.Setenv("POLL_INTERVAL", "3")
 
 		cfg, err := config.ParseAgentConfig([]string{
 			"-config=" + path,
 			"-a=from-flag:8080",
+			"-grpc-address=from-flag:3200",
 			"-r=5",
 			"-p=4",
 			"-crypto-key=/tmp/flag.pem",
@@ -63,6 +68,7 @@ func TestAgentFileConfig(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "from-env:8080", cfg.ServerAddress)
+		assert.Equal(t, "from-env:3300", cfg.GRPCAddress)
 		assert.Equal(t, 5*time.Second, cfg.ReportInterval)
 		assert.Equal(t, 3*time.Second, cfg.PollInterval)
 		assert.Equal(t, "/tmp/flag.pem", cfg.CryptoKey)
@@ -73,6 +79,7 @@ func TestServerFileConfig(t *testing.T) {
 	t.Run("loads every option from long config flag", func(t *testing.T) {
 		path := writeConfigFile(t, `{
 			"address": "server-file:8080",
+			"grpc_address": "server-file:3200",
 			"restore": false,
 			"store_interval": "1.5s",
 			"store_file": "/tmp/file.db",
@@ -88,6 +95,7 @@ func TestServerFileConfig(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "server-file:8080", cfg.Address)
+		assert.Equal(t, "server-file:3200", cfg.GRPCAddress)
 		assert.False(t, cfg.Restore)
 		assert.Equal(t, 1500*time.Millisecond, cfg.StoreInterval)
 		assert.Equal(t, "/tmp/file.db", cfg.FileStoragePath)
@@ -113,6 +121,7 @@ func TestServerFileConfig(t *testing.T) {
 	t.Run("flags and environment override file", func(t *testing.T) {
 		path := writeConfigFile(t, `{
 			"address": "from-file:8080",
+			"grpc_address": "from-file:3200",
 			"restore": true,
 			"store_interval": "30s",
 			"store_file": "/tmp/file.db",
@@ -120,6 +129,7 @@ func TestServerFileConfig(t *testing.T) {
 			"trusted_subnet": "192.168.1.0/24"
 		}`)
 		t.Setenv("ADDRESS", "from-env:8080")
+		t.Setenv("GRPC_ADDRESS", "from-env:3300")
 		t.Setenv("STORE_INTERVAL", "3")
 		t.Setenv("STORE_FILE", "/tmp/env.db")
 		t.Setenv("TRUSTED_SUBNET", "10.0.0.0/8")
@@ -127,6 +137,7 @@ func TestServerFileConfig(t *testing.T) {
 		cfg, err := config.ParseServerConfig([]string{
 			"-c=" + path,
 			"-a=from-flag:8080",
+			"-grpc-address=from-flag:3200",
 			"-i=5",
 			"-f=/tmp/flag.db",
 			"-r=false",
@@ -136,6 +147,7 @@ func TestServerFileConfig(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "from-env:8080", cfg.Address)
+		assert.Equal(t, "from-env:3300", cfg.GRPCAddress)
 		assert.Equal(t, 3*time.Second, cfg.StoreInterval)
 		assert.Equal(t, "/tmp/env.db", cfg.FileStoragePath)
 		assert.False(t, cfg.Restore)

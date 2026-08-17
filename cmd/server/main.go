@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,8 +17,10 @@ import (
 	"j30att/observer/internal/buildinfo"
 	"j30att/observer/internal/config"
 	"j30att/observer/internal/encryption"
+	metricspb "j30att/observer/internal/proto"
 	"j30att/observer/internal/server/audit"
 	"j30att/observer/internal/server/controller"
+	"j30att/observer/internal/server/grpcserver"
 	"j30att/observer/internal/server/handlers/get"
 	"j30att/observer/internal/server/handlers/getlist"
 	"j30att/observer/internal/server/handlers/update"
@@ -29,6 +32,7 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
+	"google.golang.org/grpc"
 )
 
 const gracefulShutdownTimeout = 30 * time.Second
@@ -174,7 +178,18 @@ func runServer(args []string, logger zerolog.Logger) (runErr error) {
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
-	serveErr := serveUntilShutdown(shutdownCtx, server, server.ListenAndServe, gracefulShutdownTimeout)
+	var serveErr error
+	if cfg.GRPCAddress == "" {
+		serveErr = serveUntilShutdown(shutdownCtx, server, server.ListenAndServe, gracefulShutdownTimeout)
+	} else {
+		grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.TrustedSubnetUnaryInterceptor(cfg.TrustedSubnet)))
+		metricspb.RegisterMetricsServer(grpcServer, grpcserver.NewMetricsServer(updateMetricCommand))
+		grpcListener, err := net.Listen("tcp", cfg.GRPCAddress)
+		if err != nil {
+			return fmt.Errorf("listen grpc server: %w", err)
+		}
+		serveErr = serveHTTPAndGRPCUntilShutdown(shutdownCtx, server, grpcServer, grpcListener, gracefulShutdownTimeout)
+	}
 	shutdownErr := serveErr
 
 	if err := stopPeriodicSaver(periodicSaverCancel, &periodicSaverWG, periodicSaver); err != nil {
@@ -186,6 +201,72 @@ func runServer(args []string, logger zerolog.Logger) (runErr error) {
 	}
 
 	return nil
+}
+
+func serveHTTPAndGRPCUntilShutdown(ctx context.Context, httpServer *http.Server, grpcServer *grpc.Server, grpcListener net.Listener, shutdownTimeout time.Duration) error {
+	serveErrors := make(chan error, 2)
+	go func() {
+		serveErrors <- httpServer.ListenAndServe()
+	}()
+	go func() {
+		serveErrors <- grpcServer.Serve(grpcListener)
+	}()
+
+	select {
+	case err := <-serveErrors:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		grpcServer.GracefulStop()
+		_ = httpServer.Close()
+		return err
+	case <-ctx.Done():
+	}
+
+	gracefulCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	httpShutdownErr := make(chan error, 1)
+	go func() {
+		httpShutdownErr <- httpServer.Shutdown(gracefulCtx)
+	}()
+
+	grpcStopped := make(chan struct{})
+	go func() {
+		grpcServer.GracefulStop()
+		close(grpcStopped)
+	}()
+
+	var shutdownErr error
+	select {
+	case err := <-httpShutdownErr:
+		if err != nil {
+			if closeErr := httpServer.Close(); closeErr != nil {
+				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("shutdown HTTP server: %w", err), fmt.Errorf("close HTTP server: %w", closeErr))
+			} else {
+				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("shutdown HTTP server: %w", err))
+			}
+		}
+	case <-gracefulCtx.Done():
+		if closeErr := httpServer.Close(); closeErr != nil {
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("close HTTP server: %w", closeErr))
+		}
+		shutdownErr = errors.Join(shutdownErr, gracefulCtx.Err())
+	}
+
+	select {
+	case <-grpcStopped:
+	case <-gracefulCtx.Done():
+		grpcServer.Stop()
+		shutdownErr = errors.Join(shutdownErr, gracefulCtx.Err())
+	}
+
+	for range 2 {
+		if err := <-serveErrors; err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, grpc.ErrServerStopped) {
+			shutdownErr = errors.Join(shutdownErr, err)
+		}
+	}
+
+	return shutdownErr
 }
 
 func serveUntilShutdown(ctx context.Context, server *http.Server, serve func() error, shutdownTimeout time.Duration) error {

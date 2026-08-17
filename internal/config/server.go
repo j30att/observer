@@ -16,6 +16,7 @@ import (
 // ServerConfig contains runtime settings for the metrics HTTP server.
 type ServerConfig struct {
 	Address         string
+	GRPCAddress     string
 	StoreInterval   time.Duration
 	FileStoragePath string
 	Restore         bool
@@ -29,6 +30,7 @@ type ServerConfig struct {
 
 type serverFileConfig struct {
 	Address       *string `json:"address"`
+	GRPCAddress   *string `json:"grpc_address"`
 	Restore       *bool   `json:"restore"`
 	StoreInterval *string `json:"store_interval"`
 	StoreFile     *string `json:"store_file"`
@@ -97,6 +99,10 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		cfg.Address = value
 	}
 
+	if value, ok := os.LookupEnv("GRPC_ADDRESS"); ok {
+		cfg.GRPCAddress = value
+	}
+
 	if value, ok := os.LookupEnv("DATABASE_DSN"); ok {
 		cfg.DatabaseDSN = value
 	}
@@ -149,6 +155,7 @@ func parseServerFlags(cfg *ServerConfig, args []string) (string, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&cfg.Address, "a", cfg.Address, "HTTP server endpoint address")
+	fs.StringVar(&cfg.GRPCAddress, "grpc-address", cfg.GRPCAddress, "gRPC server endpoint address")
 	fs.IntVar(&storeIntervalSeconds, "i", int(cfg.StoreInterval/time.Second), "store interval in seconds")
 	fs.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "file storage path")
 	fs.BoolVar(&cfg.Restore, "r", cfg.Restore, "restore metrics from file storage on startup")
@@ -187,6 +194,9 @@ func loadServerFile(path string, cfg *ServerConfig) error {
 
 	if fileCfg.Address != nil {
 		cfg.Address = *fileCfg.Address
+	}
+	if fileCfg.GRPCAddress != nil {
+		cfg.GRPCAddress = *fileCfg.GRPCAddress
 	}
 	if fileCfg.Restore != nil {
 		cfg.Restore = *fileCfg.Restore
