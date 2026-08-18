@@ -110,4 +110,21 @@ func TestDecryption(t *testing.T) {
 
 		assert.Equal(t, http.StatusNoContent, rec.Code)
 	})
+
+	t.Run("Должен пропустить запрос без ключа", func(t *testing.T) {
+		var received []byte
+		handler := middlewares.Decryption(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			received, err = io.ReadAll(r.Body)
+			require.NoError(t, err)
+			w.WriteHeader(http.StatusOK)
+		}))
+		req := httptest.NewRequest(http.MethodPost, "/updates", bytes.NewReader([]byte("plain text")))
+		req.Header.Set("Content-Encoding", encryption.Encoding)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, []byte("plain text"), received)
+	})
 }

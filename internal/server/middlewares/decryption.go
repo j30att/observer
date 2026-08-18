@@ -12,6 +12,12 @@ import (
 
 // Decryption decrypts RSA-encrypted request bodies.
 func Decryption(privateKey *rsa.PrivateKey) func(http.Handler) http.Handler {
+	if privateKey == nil {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestBody := r.Body
