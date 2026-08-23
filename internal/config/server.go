@@ -5,15 +5,20 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // ServerConfig contains runtime settings for the metrics HTTP server.
 type ServerConfig struct {
 	Address         string
+	GRPCAddress     string
+	GRPCCertFile    string
+	GRPCKeyFile     string
 	StoreInterval   time.Duration
 	FileStoragePath string
 	Restore         bool
@@ -22,10 +27,14 @@ type ServerConfig struct {
 	CryptoKey       string
 	AuditFile       string
 	AuditURL        string
+	TrustedSubnet   string
 }
 
 type serverFileConfig struct {
 	Address       *string `json:"address"`
+	GRPCAddress   *string `json:"grpc_address"`
+	GRPCCertFile  *string `json:"grpc_cert_file"`
+	GRPCKeyFile   *string `json:"grpc_key_file"`
 	Restore       *bool   `json:"restore"`
 	StoreInterval *string `json:"store_interval"`
 	StoreFile     *string `json:"store_file"`
@@ -34,6 +43,7 @@ type serverFileConfig struct {
 	CryptoKey     *string `json:"crypto_key"`
 	AuditFile     *string `json:"audit_file"`
 	AuditURL      *string `json:"audit_url"`
+	TrustedSubnet *string `json:"trusted_subnet"`
 }
 
 // NewServerConfig returns the default server configuration.
@@ -93,6 +103,18 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		cfg.Address = value
 	}
 
+	if value, ok := os.LookupEnv("GRPC_ADDRESS"); ok {
+		cfg.GRPCAddress = value
+	}
+
+	if value, ok := os.LookupEnv("GRPC_CERT_FILE"); ok {
+		cfg.GRPCCertFile = value
+	}
+
+	if value, ok := os.LookupEnv("GRPC_KEY_FILE"); ok {
+		cfg.GRPCKeyFile = value
+	}
+
 	if value, ok := os.LookupEnv("DATABASE_DSN"); ok {
 		cfg.DatabaseDSN = value
 	}
@@ -113,6 +135,10 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		cfg.AuditURL = value
 	}
 
+	if value, ok := os.LookupEnv("TRUSTED_SUBNET"); ok {
+		cfg.TrustedSubnet = value
+	}
+
 	if cfg.StoreInterval < 0 {
 		return ServerConfig{}, fmt.Errorf("invalid store interval value %d: interval must be non-negative seconds", int(cfg.StoreInterval/time.Second))
 	}
@@ -121,6 +147,13 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		parsedURL, err := url.ParseRequestURI(cfg.AuditURL)
 		if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
 			return ServerConfig{}, fmt.Errorf("invalid audit URL %q: full URL with scheme and host is required", cfg.AuditURL)
+		}
+	}
+
+	cfg.TrustedSubnet = strings.TrimSpace(cfg.TrustedSubnet)
+	if cfg.TrustedSubnet != "" {
+		if _, err := netip.ParsePrefix(cfg.TrustedSubnet); err != nil {
+			return ServerConfig{}, fmt.Errorf("invalid trusted subnet %q: %w", cfg.TrustedSubnet, err)
 		}
 	}
 
@@ -134,6 +167,9 @@ func parseServerFlags(cfg *ServerConfig, args []string) (string, error) {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&cfg.Address, "a", cfg.Address, "HTTP server endpoint address")
+	fs.StringVar(&cfg.GRPCAddress, "grpc-address", cfg.GRPCAddress, "gRPC server endpoint address")
+	fs.StringVar(&cfg.GRPCCertFile, "grpc-cert", cfg.GRPCCertFile, "path to the gRPC TLS certificate file")
+	fs.StringVar(&cfg.GRPCKeyFile, "grpc-key", cfg.GRPCKeyFile, "path to the gRPC TLS private key file")
 	fs.IntVar(&storeIntervalSeconds, "i", int(cfg.StoreInterval/time.Second), "store interval in seconds")
 	fs.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "file storage path")
 	fs.BoolVar(&cfg.Restore, "r", cfg.Restore, "restore metrics from file storage on startup")
@@ -142,6 +178,7 @@ func parseServerFlags(cfg *ServerConfig, args []string) (string, error) {
 	fs.StringVar(&cfg.CryptoKey, "crypto-key", cfg.CryptoKey, "path to the private encryption key")
 	fs.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "audit log file path")
 	fs.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "audit log receiver URL")
+	fs.StringVar(&cfg.TrustedSubnet, "t", cfg.TrustedSubnet, "trusted agent subnet in CIDR notation")
 	fs.StringVar(&configPath, "c", configPath, "path to the JSON configuration file")
 	fs.StringVar(&configPath, "config", configPath, "path to the JSON configuration file")
 
@@ -172,6 +209,15 @@ func loadServerFile(path string, cfg *ServerConfig) error {
 	if fileCfg.Address != nil {
 		cfg.Address = *fileCfg.Address
 	}
+	if fileCfg.GRPCAddress != nil {
+		cfg.GRPCAddress = *fileCfg.GRPCAddress
+	}
+	if fileCfg.GRPCCertFile != nil {
+		cfg.GRPCCertFile = *fileCfg.GRPCCertFile
+	}
+	if fileCfg.GRPCKeyFile != nil {
+		cfg.GRPCKeyFile = *fileCfg.GRPCKeyFile
+	}
 	if fileCfg.Restore != nil {
 		cfg.Restore = *fileCfg.Restore
 	}
@@ -198,6 +244,9 @@ func loadServerFile(path string, cfg *ServerConfig) error {
 	}
 	if fileCfg.AuditURL != nil {
 		cfg.AuditURL = *fileCfg.AuditURL
+	}
+	if fileCfg.TrustedSubnet != nil {
+		cfg.TrustedSubnet = *fileCfg.TrustedSubnet
 	}
 
 	return nil

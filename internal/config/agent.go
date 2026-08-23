@@ -13,6 +13,9 @@ import (
 // AgentConfig contains runtime settings for the metrics collection agent.
 type AgentConfig struct {
 	ServerAddress  string
+	GRPCAddress    string
+	GRPCCACertFile string
+	GRPCServerName string
 	PollInterval   time.Duration
 	ReportInterval time.Duration
 	Key            string
@@ -22,6 +25,9 @@ type AgentConfig struct {
 
 type agentFileConfig struct {
 	Address        *string `json:"address"`
+	GRPCAddress    *string `json:"grpc_address"`
+	GRPCCACertFile *string `json:"grpc_ca_cert_file"`
+	GRPCServerName *string `json:"grpc_server_name"`
 	ReportInterval *string `json:"report_interval"`
 	PollInterval   *string `json:"poll_interval"`
 	Key            *string `json:"key"`
@@ -84,6 +90,18 @@ func ParseAgentConfig(args []string) (AgentConfig, error) {
 		cfg.ServerAddress = value
 	}
 
+	if value, ok := os.LookupEnv("GRPC_ADDRESS"); ok {
+		cfg.GRPCAddress = value
+	}
+
+	if value, ok := os.LookupEnv("GRPC_CA_CERT_FILE"); ok {
+		cfg.GRPCCACertFile = value
+	}
+
+	if value, ok := os.LookupEnv("GRPC_SERVER_NAME"); ok {
+		cfg.GRPCServerName = value
+	}
+
 	if value, ok := os.LookupEnv("KEY"); ok {
 		cfg.Key = value
 	}
@@ -115,6 +133,9 @@ func parseAgentFlags(cfg *AgentConfig, args []string) (string, error) {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "HTTP server endpoint address")
+	fs.StringVar(&cfg.GRPCAddress, "grpc-address", cfg.GRPCAddress, "gRPC server endpoint address")
+	fs.StringVar(&cfg.GRPCCACertFile, "grpc-ca-cert", cfg.GRPCCACertFile, "path to the gRPC CA certificate file")
+	fs.StringVar(&cfg.GRPCServerName, "grpc-server-name", cfg.GRPCServerName, "expected gRPC server TLS name")
 	fs.IntVar(&reportSeconds, "r", int(cfg.ReportInterval/time.Second), "report interval in seconds")
 	fs.IntVar(&pollSeconds, "p", int(cfg.PollInterval/time.Second), "poll interval in seconds")
 	fs.StringVar(&cfg.Key, "k", cfg.Key, "hash signature key")
@@ -152,6 +173,15 @@ func loadAgentFile(path string, cfg *AgentConfig) error {
 
 	if fileCfg.Address != nil {
 		cfg.ServerAddress = *fileCfg.Address
+	}
+	if fileCfg.GRPCAddress != nil {
+		cfg.GRPCAddress = *fileCfg.GRPCAddress
+	}
+	if fileCfg.GRPCCACertFile != nil {
+		cfg.GRPCCACertFile = *fileCfg.GRPCCACertFile
+	}
+	if fileCfg.GRPCServerName != nil {
+		cfg.GRPCServerName = *fileCfg.GRPCServerName
 	}
 	if fileCfg.ReportInterval != nil {
 		cfg.ReportInterval, err = time.ParseDuration(*fileCfg.ReportInterval)

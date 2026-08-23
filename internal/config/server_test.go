@@ -15,6 +15,9 @@ func TestServerConfig(t *testing.T) {
 			cfg := config.NewServerConfig()
 
 			assert.Equal(t, "localhost:8080", cfg.Address)
+			assert.Empty(t, cfg.GRPCAddress)
+			assert.Empty(t, cfg.GRPCCertFile)
+			assert.Empty(t, cfg.GRPCKeyFile)
 			assert.Equal(t, 300*time.Second, cfg.StoreInterval)
 			assert.Empty(t, cfg.FileStoragePath)
 			assert.True(t, cfg.Restore)
@@ -23,6 +26,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Empty(t, cfg.CryptoKey)
 			assert.Empty(t, cfg.AuditFile)
 			assert.Empty(t, cfg.AuditURL)
+			assert.Empty(t, cfg.TrustedSubnet)
 		})
 	})
 
@@ -32,6 +36,9 @@ func TestServerConfig(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, "localhost:8080", cfg.Address)
+			assert.Empty(t, cfg.GRPCAddress)
+			assert.Empty(t, cfg.GRPCCertFile)
+			assert.Empty(t, cfg.GRPCKeyFile)
 			assert.Equal(t, 300*time.Second, cfg.StoreInterval)
 			assert.Empty(t, cfg.FileStoragePath)
 			assert.True(t, cfg.Restore)
@@ -44,6 +51,9 @@ func TestServerConfig(t *testing.T) {
 		t.Run("Должен переопределить values из flags", func(t *testing.T) {
 			cfg, err := config.ParseServerConfig([]string{
 				"-a=127.0.0.1:9000",
+				"-grpc-address=127.0.0.1:3200",
+				"-grpc-cert=/tmp/server.pem",
+				"-grpc-key=/tmp/server-key.pem",
 				"-i=15",
 				"-f=/tmp/custom-metrics.json",
 				"-r=false",
@@ -52,10 +62,14 @@ func TestServerConfig(t *testing.T) {
 				"-crypto-key=/tmp/private.pem",
 				"--audit-file=/tmp/audit.log",
 				"--audit-url=https://audit.example.com/events",
+				"-t=192.168.1.0/24",
 			})
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9000", cfg.Address)
+			assert.Equal(t, "127.0.0.1:3200", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/server.pem", cfg.GRPCCertFile)
+			assert.Equal(t, "/tmp/server-key.pem", cfg.GRPCKeyFile)
 			assert.Equal(t, 15*time.Second, cfg.StoreInterval)
 			assert.Equal(t, "/tmp/custom-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)
@@ -64,10 +78,14 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/events", cfg.AuditURL)
+			assert.Equal(t, "192.168.1.0/24", cfg.TrustedSubnet)
 		})
 
 		t.Run("Должен переопределить values из environment", func(t *testing.T) {
 			t.Setenv("ADDRESS", "127.0.0.1:9100")
+			t.Setenv("GRPC_ADDRESS", "127.0.0.1:3300")
+			t.Setenv("GRPC_CERT_FILE", "/tmp/env-server.pem")
+			t.Setenv("GRPC_KEY_FILE", "/tmp/env-server-key.pem")
 			t.Setenv("STORE_INTERVAL", "20")
 			t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
 			t.Setenv("RESTORE", "false")
@@ -76,11 +94,15 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("CRYPTO_KEY", "/tmp/env-private.pem")
 			t.Setenv("AUDIT_FILE", "/tmp/env-audit.log")
 			t.Setenv("AUDIT_URL", "https://audit.example.com/env")
+			t.Setenv("TRUSTED_SUBNET", "10.0.0.0/8")
 
 			cfg, err := config.ParseServerConfig(nil)
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.Address)
+			assert.Equal(t, "127.0.0.1:3300", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/env-server.pem", cfg.GRPCCertFile)
+			assert.Equal(t, "/tmp/env-server-key.pem", cfg.GRPCKeyFile)
 			assert.Equal(t, 20*time.Second, cfg.StoreInterval)
 			assert.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)
@@ -89,10 +111,14 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/env-private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/env-audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/env", cfg.AuditURL)
+			assert.Equal(t, "10.0.0.0/8", cfg.TrustedSubnet)
 		})
 
 		t.Run("Должен отдать приоритет environment над flags", func(t *testing.T) {
 			t.Setenv("ADDRESS", "127.0.0.1:9100")
+			t.Setenv("GRPC_ADDRESS", "127.0.0.1:3300")
+			t.Setenv("GRPC_CERT_FILE", "/tmp/env-server.pem")
+			t.Setenv("GRPC_KEY_FILE", "/tmp/env-server-key.pem")
 			t.Setenv("STORE_INTERVAL", "20")
 			t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
 			t.Setenv("RESTORE", "false")
@@ -101,9 +127,13 @@ func TestServerConfig(t *testing.T) {
 			t.Setenv("CRYPTO_KEY", "/tmp/env-private.pem")
 			t.Setenv("AUDIT_FILE", "/tmp/env-audit.log")
 			t.Setenv("AUDIT_URL", "https://audit.example.com/env")
+			t.Setenv("TRUSTED_SUBNET", "10.0.0.0/8")
 
 			cfg, err := config.ParseServerConfig([]string{
 				"-a=127.0.0.1:9000",
+				"-grpc-address=127.0.0.1:3200",
+				"-grpc-cert=/tmp/flag-server.pem",
+				"-grpc-key=/tmp/flag-server-key.pem",
 				"-i=15",
 				"-f=/tmp/custom-metrics.json",
 				"-r=true",
@@ -112,10 +142,14 @@ func TestServerConfig(t *testing.T) {
 				"-crypto-key=/tmp/flag-private.pem",
 				"--audit-file=/tmp/flag-audit.log",
 				"--audit-url=https://audit.example.com/flag",
+				"-t=192.168.1.0/24",
 			})
 
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.Address)
+			assert.Equal(t, "127.0.0.1:3300", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/env-server.pem", cfg.GRPCCertFile)
+			assert.Equal(t, "/tmp/env-server-key.pem", cfg.GRPCKeyFile)
 			assert.Equal(t, 20*time.Second, cfg.StoreInterval)
 			assert.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)
@@ -124,6 +158,7 @@ func TestServerConfig(t *testing.T) {
 			assert.Equal(t, "/tmp/env-private.pem", cfg.CryptoKey)
 			assert.Equal(t, "/tmp/env-audit.log", cfg.AuditFile)
 			assert.Equal(t, "https://audit.example.com/env", cfg.AuditURL)
+			assert.Equal(t, "10.0.0.0/8", cfg.TrustedSubnet)
 		})
 
 		t.Run("Ошибка, неизвестный flag", func(t *testing.T) {
@@ -166,6 +201,12 @@ func TestServerConfig(t *testing.T) {
 			_, err := config.ParseServerConfig([]string{"--audit-url=localhost:9000/audit"})
 
 			require.EqualError(t, err, `invalid audit URL "localhost:9000/audit": full URL with scheme and host is required`)
+		})
+
+		t.Run("Ошибка, невалидная trusted subnet", func(t *testing.T) {
+			_, err := config.ParseServerConfig([]string{"-t=192.168.1.0"})
+
+			require.ErrorContains(t, err, `invalid trusted subnet "192.168.1.0"`)
 		})
 	})
 }

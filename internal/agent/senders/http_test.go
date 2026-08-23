@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,9 @@ func TestHTTPSender(t *testing.T) {
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
 				assert.Equal(t, "gzip", r.Header.Get("Accept-Encoding"))
+				assert.NotEmpty(t, r.Header.Get("X-Real-IP"))
+				_, err := netip.ParseAddr(r.Header.Get("X-Real-IP"))
+				require.NoError(t, err)
 
 				rawBody, err := io.ReadAll(r.Body)
 				require.NoError(t, err)

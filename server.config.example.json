@@ -1,5 +1,8 @@
 {
   "address": "localhost:8080",
+  "grpc_address": "localhost:3200",
+  "grpc_cert_file": "/path/to/grpc-server.pem",
+  "grpc_key_file": "/path/to/grpc-server-key.pem",
   "restore": true,
   "store_interval": "300s",
   "store_file": "/path/to/file.db",
@@ -7,5 +10,6 @@
   "key": "",
   "crypto_key": "/path/to/private-key.pem",
   "audit_file": "/path/to/audit.log",
-  "audit_url": "https://audit.example.com/events"
+  "audit_url": "https://audit.example.com/events",
+  "trusted_subnet": "192.168.1.0/24"
 }
