@@ -20,12 +20,12 @@ func TestMetricsServerUpdateMetrics(t *testing.T) {
 	repo := repository.NewMetricsRepository()
 	server := grpcserver.NewMetricsServer(update.New(repo))
 
-	_, err := server.UpdateMetrics(context.Background(), &metricspb.UpdateMetricsRequest{
+	_, err := server.UpdateMetrics(context.Background(), metricspb.UpdateMetricsRequest_builder{
 		Metrics: []*metricspb.Metric{
-			{Id: "Alloc", Type: metricspb.Metric_GAUGE, Value: 12.5},
-			{Id: "PollCount", Type: metricspb.Metric_COUNTER, Delta: 3},
+			metricspb.Metric_builder{Id: "Alloc", Type: metricspb.Metric_GAUGE, Value: 12.5}.Build(),
+			metricspb.Metric_builder{Id: "PollCount", Type: metricspb.Metric_COUNTER, Delta: 3}.Build(),
 		},
-	})
+	}.Build())
 
 	require.NoError(t, err)
 	metrics := repo.List(context.Background())

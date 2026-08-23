@@ -1,6 +1,8 @@
 {
   "address": "localhost:8080",
   "grpc_address": "localhost:3200",
+  "grpc_cert_file": "/path/to/grpc-server.pem",
+  "grpc_key_file": "/path/to/grpc-server-key.pem",
   "restore": true,
   "store_interval": "300s",
   "store_file": "/path/to/file.db",

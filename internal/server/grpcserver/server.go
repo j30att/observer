@@ -45,7 +45,7 @@ func (s *MetricsServer) UpdateMetrics(ctx context.Context, req *metricspb.Update
 		return nil, status.Errorf(codes.Internal, "update metrics: %v", err)
 	}
 
-	return &metricspb.UpdateMetricsResponse{}, nil
+	return metricspb.UpdateMetricsResponse_builder{}.Build(), nil
 }
 
 func convertMetric(metric *metricspb.Metric) (model.Metrics, error) {

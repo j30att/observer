@@ -16,6 +16,8 @@ func TestAgentConfig(t *testing.T) {
 
 			assert.Equal(t, "localhost:8080", cfg.ServerAddress)
 			assert.Empty(t, cfg.GRPCAddress)
+			assert.Empty(t, cfg.GRPCCACertFile)
+			assert.Empty(t, cfg.GRPCServerName)
 			assert.Equal(t, 2*time.Second, cfg.PollInterval)
 			assert.Equal(t, 10*time.Second, cfg.ReportInterval)
 			assert.Empty(t, cfg.Key)
@@ -31,6 +33,8 @@ func TestAgentConfig(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "localhost:8080", cfg.ServerAddress)
 			assert.Empty(t, cfg.GRPCAddress)
+			assert.Empty(t, cfg.GRPCCACertFile)
+			assert.Empty(t, cfg.GRPCServerName)
 			assert.Equal(t, 2*time.Second, cfg.PollInterval)
 			assert.Equal(t, 10*time.Second, cfg.ReportInterval)
 			assert.Empty(t, cfg.Key)
@@ -41,6 +45,8 @@ func TestAgentConfig(t *testing.T) {
 			cfg, err := config.ParseAgentConfig([]string{
 				"-a=127.0.0.1:9000",
 				"-grpc-address=127.0.0.1:3200",
+				"-grpc-ca-cert=/tmp/ca.pem",
+				"-grpc-server-name=metrics.local",
 				"-r=15",
 				"-p=5",
 				"-k=flag-key",
@@ -51,6 +57,8 @@ func TestAgentConfig(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9000", cfg.ServerAddress)
 			assert.Equal(t, "127.0.0.1:3200", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/ca.pem", cfg.GRPCCACertFile)
+			assert.Equal(t, "metrics.local", cfg.GRPCServerName)
 			assert.Equal(t, 5*time.Second, cfg.PollInterval)
 			assert.Equal(t, 15*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "flag-key", cfg.Key)
@@ -61,6 +69,8 @@ func TestAgentConfig(t *testing.T) {
 		t.Run("Должен переопределить values из environment", func(t *testing.T) {
 			t.Setenv("ADDRESS", "127.0.0.1:9100")
 			t.Setenv("GRPC_ADDRESS", "127.0.0.1:3300")
+			t.Setenv("GRPC_CA_CERT_FILE", "/tmp/env-ca.pem")
+			t.Setenv("GRPC_SERVER_NAME", "env.metrics.local")
 			t.Setenv("REPORT_INTERVAL", "20")
 			t.Setenv("POLL_INTERVAL", "7")
 			t.Setenv("KEY", "env-key")
@@ -72,6 +82,8 @@ func TestAgentConfig(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.ServerAddress)
 			assert.Equal(t, "127.0.0.1:3300", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/env-ca.pem", cfg.GRPCCACertFile)
+			assert.Equal(t, "env.metrics.local", cfg.GRPCServerName)
 			assert.Equal(t, 7*time.Second, cfg.PollInterval)
 			assert.Equal(t, 20*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "env-key", cfg.Key)
@@ -82,6 +94,8 @@ func TestAgentConfig(t *testing.T) {
 		t.Run("Должен отдать приоритет environment над flags", func(t *testing.T) {
 			t.Setenv("ADDRESS", "127.0.0.1:9100")
 			t.Setenv("GRPC_ADDRESS", "127.0.0.1:3300")
+			t.Setenv("GRPC_CA_CERT_FILE", "/tmp/env-ca.pem")
+			t.Setenv("GRPC_SERVER_NAME", "env.metrics.local")
 			t.Setenv("REPORT_INTERVAL", "20")
 			t.Setenv("POLL_INTERVAL", "7")
 			t.Setenv("KEY", "env-key")
@@ -91,6 +105,8 @@ func TestAgentConfig(t *testing.T) {
 			cfg, err := config.ParseAgentConfig([]string{
 				"-a=127.0.0.1:9000",
 				"-grpc-address=127.0.0.1:3200",
+				"-grpc-ca-cert=/tmp/flag-ca.pem",
+				"-grpc-server-name=flag.metrics.local",
 				"-r=15",
 				"-p=5",
 				"-k=flag-key",
@@ -101,6 +117,8 @@ func TestAgentConfig(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.ServerAddress)
 			assert.Equal(t, "127.0.0.1:3300", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/env-ca.pem", cfg.GRPCCACertFile)
+			assert.Equal(t, "env.metrics.local", cfg.GRPCServerName)
 			assert.Equal(t, 7*time.Second, cfg.PollInterval)
 			assert.Equal(t, 20*time.Second, cfg.ReportInterval)
 			assert.Equal(t, "env-key", cfg.Key)

@@ -48,7 +48,10 @@ func main() {
 	}
 	var sender agent.Sender
 	if cfg.GRPCAddress != "" {
-		grpcSender, err := senders.NewGRPCSender(cfg.GRPCAddress)
+		grpcSender, err := senders.NewGRPCSender(cfg.GRPCAddress, senders.GRPCSenderOptions{
+			CACertFile: cfg.GRPCCACertFile,
+			ServerName: cfg.GRPCServerName,
+		})
 		if err != nil {
 			logger.Fatal().Err(err).Msg("failed to create grpc sender")
 		}

@@ -8,13 +8,6 @@ import (
 
 const realIPHeader = "X-Real-IP"
 
-// TrustedSubnet allows metric update requests only from the configured CIDR.
-func TrustedSubnet(trustedSubnet string) func(http.Handler) http.Handler {
-	return trustedSubnetMiddleware(trustedSubnet, func(*http.Request) bool {
-		return true
-	})
-}
-
 // TrustedSubnetForMetricUpdates allows metric update requests only from the configured CIDR.
 func TrustedSubnetForMetricUpdates(trustedSubnet string) func(http.Handler) http.Handler {
 	return trustedSubnetMiddleware(trustedSubnet, isMetricUpdateRequest)

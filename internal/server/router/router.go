@@ -34,7 +34,9 @@ func NewRouterWithOptions(metricController *controller.MetricController, logger 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.StripSlashes)
 	r.Use(middlewares.Logger(logger))
-	r.Use(middlewares.TrustedSubnetForMetricUpdates(opts.TrustedSubnet))
+	if opts.TrustedSubnet != "" {
+		r.Use(middlewares.TrustedSubnetForMetricUpdates(opts.TrustedSubnet))
+	}
 	if opts.SignatureKey != "" {
 		r.Use(middlewares.Signature(opts.SignatureKey))
 	}

@@ -17,6 +17,8 @@ import (
 type ServerConfig struct {
 	Address         string
 	GRPCAddress     string
+	GRPCCertFile    string
+	GRPCKeyFile     string
 	StoreInterval   time.Duration
 	FileStoragePath string
 	Restore         bool
@@ -31,6 +33,8 @@ type ServerConfig struct {
 type serverFileConfig struct {
 	Address       *string `json:"address"`
 	GRPCAddress   *string `json:"grpc_address"`
+	GRPCCertFile  *string `json:"grpc_cert_file"`
+	GRPCKeyFile   *string `json:"grpc_key_file"`
 	Restore       *bool   `json:"restore"`
 	StoreInterval *string `json:"store_interval"`
 	StoreFile     *string `json:"store_file"`
@@ -103,6 +107,14 @@ func ParseServerConfig(args []string) (ServerConfig, error) {
 		cfg.GRPCAddress = value
 	}
 
+	if value, ok := os.LookupEnv("GRPC_CERT_FILE"); ok {
+		cfg.GRPCCertFile = value
+	}
+
+	if value, ok := os.LookupEnv("GRPC_KEY_FILE"); ok {
+		cfg.GRPCKeyFile = value
+	}
+
 	if value, ok := os.LookupEnv("DATABASE_DSN"); ok {
 		cfg.DatabaseDSN = value
 	}
@@ -156,6 +168,8 @@ func parseServerFlags(cfg *ServerConfig, args []string) (string, error) {
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&cfg.Address, "a", cfg.Address, "HTTP server endpoint address")
 	fs.StringVar(&cfg.GRPCAddress, "grpc-address", cfg.GRPCAddress, "gRPC server endpoint address")
+	fs.StringVar(&cfg.GRPCCertFile, "grpc-cert", cfg.GRPCCertFile, "path to the gRPC TLS certificate file")
+	fs.StringVar(&cfg.GRPCKeyFile, "grpc-key", cfg.GRPCKeyFile, "path to the gRPC TLS private key file")
 	fs.IntVar(&storeIntervalSeconds, "i", int(cfg.StoreInterval/time.Second), "store interval in seconds")
 	fs.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "file storage path")
 	fs.BoolVar(&cfg.Restore, "r", cfg.Restore, "restore metrics from file storage on startup")
@@ -197,6 +211,12 @@ func loadServerFile(path string, cfg *ServerConfig) error {
 	}
 	if fileCfg.GRPCAddress != nil {
 		cfg.GRPCAddress = *fileCfg.GRPCAddress
+	}
+	if fileCfg.GRPCCertFile != nil {
+		cfg.GRPCCertFile = *fileCfg.GRPCCertFile
+	}
+	if fileCfg.GRPCKeyFile != nil {
+		cfg.GRPCKeyFile = *fileCfg.GRPCKeyFile
 	}
 	if fileCfg.Restore != nil {
 		cfg.Restore = *fileCfg.Restore

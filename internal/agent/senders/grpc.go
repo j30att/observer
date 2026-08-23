@@ -2,14 +2,17 @@ package senders
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
+	"os"
 
 	agentmodel "j30att/observer/internal/agent/model"
 	metricspb "j30att/observer/internal/proto"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -22,9 +25,20 @@ type GRPCSender struct {
 	client  metricspb.MetricsClient
 }
 
+// GRPCSenderOptions contains TLS settings for the gRPC sender.
+type GRPCSenderOptions struct {
+	CACertFile string
+	ServerName string
+}
+
 // NewGRPCSender creates a gRPC sender for the given server address.
-func NewGRPCSender(address string) (*GRPCSender, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func NewGRPCSender(address string, opts GRPCSenderOptions) (*GRPCSender, error) {
+	transportCredentials, err := newClientTLSCredentials(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(transportCredentials))
 	if err != nil {
 		return nil, fmt.Errorf("create grpc client: %w", err)
 	}
@@ -36,22 +50,48 @@ func NewGRPCSender(address string) (*GRPCSender, error) {
 	}, nil
 }
 
+func newClientTLSCredentials(opts GRPCSenderOptions) (credentials.TransportCredentials, error) {
+	roots, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("load system certificate pool: %w", err)
+	}
+	if roots == nil {
+		roots = x509.NewCertPool()
+	}
+
+	if opts.CACertFile != "" {
+		cert, err := os.ReadFile(opts.CACertFile)
+		if err != nil {
+			return nil, fmt.Errorf("read grpc CA certificate: %w", err)
+		}
+		if ok := roots.AppendCertsFromPEM(cert); !ok {
+			return nil, fmt.Errorf("parse grpc CA certificate %q: no certificates found", opts.CACertFile)
+		}
+	}
+
+	return credentials.NewTLS(&tls.Config{
+		RootCAs:    roots,
+		ServerName: opts.ServerName,
+		MinVersion: tls.VersionTLS12,
+	}), nil
+}
+
 // Send posts a metrics snapshot to the configured gRPC server.
 func (s *GRPCSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapshot) error {
 	metrics := make([]*metricspb.Metric, 0, len(snapshot.Gauges)+len(snapshot.Counters))
 	for name, value := range snapshot.Gauges {
-		metrics = append(metrics, &metricspb.Metric{
+		metrics = append(metrics, metricspb.Metric_builder{
 			Id:    name,
 			Type:  metricspb.Metric_GAUGE,
 			Value: value,
-		})
+		}.Build())
 	}
 	for name, delta := range snapshot.Counters {
-		metrics = append(metrics, &metricspb.Metric{
+		metrics = append(metrics, metricspb.Metric_builder{
 			Id:    name,
 			Type:  metricspb.Metric_COUNTER,
 			Delta: delta,
-		})
+		}.Build())
 	}
 
 	if len(metrics) == 0 {
@@ -64,7 +104,7 @@ func (s *GRPCSender) Send(ctx context.Context, snapshot agentmodel.MetricsSnapsh
 		requestCtx = metadata.AppendToOutgoingContext(requestCtx, realIPMetadataKey, realIP)
 	}
 
-	_, err := s.client.UpdateMetrics(requestCtx, &metricspb.UpdateMetricsRequest{Metrics: metrics})
+	_, err := s.client.UpdateMetrics(requestCtx, metricspb.UpdateMetricsRequest_builder{Metrics: metrics}.Build())
 	if err != nil {
 		return fmt.Errorf("send grpc metrics update request: %w", err)
 	}

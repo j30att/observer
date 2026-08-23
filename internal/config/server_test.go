@@ -16,6 +16,8 @@ func TestServerConfig(t *testing.T) {
 
 			assert.Equal(t, "localhost:8080", cfg.Address)
 			assert.Empty(t, cfg.GRPCAddress)
+			assert.Empty(t, cfg.GRPCCertFile)
+			assert.Empty(t, cfg.GRPCKeyFile)
 			assert.Equal(t, 300*time.Second, cfg.StoreInterval)
 			assert.Empty(t, cfg.FileStoragePath)
 			assert.True(t, cfg.Restore)
@@ -35,6 +37,8 @@ func TestServerConfig(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "localhost:8080", cfg.Address)
 			assert.Empty(t, cfg.GRPCAddress)
+			assert.Empty(t, cfg.GRPCCertFile)
+			assert.Empty(t, cfg.GRPCKeyFile)
 			assert.Equal(t, 300*time.Second, cfg.StoreInterval)
 			assert.Empty(t, cfg.FileStoragePath)
 			assert.True(t, cfg.Restore)
@@ -48,6 +52,8 @@ func TestServerConfig(t *testing.T) {
 			cfg, err := config.ParseServerConfig([]string{
 				"-a=127.0.0.1:9000",
 				"-grpc-address=127.0.0.1:3200",
+				"-grpc-cert=/tmp/server.pem",
+				"-grpc-key=/tmp/server-key.pem",
 				"-i=15",
 				"-f=/tmp/custom-metrics.json",
 				"-r=false",
@@ -62,6 +68,8 @@ func TestServerConfig(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9000", cfg.Address)
 			assert.Equal(t, "127.0.0.1:3200", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/server.pem", cfg.GRPCCertFile)
+			assert.Equal(t, "/tmp/server-key.pem", cfg.GRPCKeyFile)
 			assert.Equal(t, 15*time.Second, cfg.StoreInterval)
 			assert.Equal(t, "/tmp/custom-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)
@@ -76,6 +84,8 @@ func TestServerConfig(t *testing.T) {
 		t.Run("Должен переопределить values из environment", func(t *testing.T) {
 			t.Setenv("ADDRESS", "127.0.0.1:9100")
 			t.Setenv("GRPC_ADDRESS", "127.0.0.1:3300")
+			t.Setenv("GRPC_CERT_FILE", "/tmp/env-server.pem")
+			t.Setenv("GRPC_KEY_FILE", "/tmp/env-server-key.pem")
 			t.Setenv("STORE_INTERVAL", "20")
 			t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
 			t.Setenv("RESTORE", "false")
@@ -91,6 +101,8 @@ func TestServerConfig(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.Address)
 			assert.Equal(t, "127.0.0.1:3300", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/env-server.pem", cfg.GRPCCertFile)
+			assert.Equal(t, "/tmp/env-server-key.pem", cfg.GRPCKeyFile)
 			assert.Equal(t, 20*time.Second, cfg.StoreInterval)
 			assert.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)
@@ -105,6 +117,8 @@ func TestServerConfig(t *testing.T) {
 		t.Run("Должен отдать приоритет environment над flags", func(t *testing.T) {
 			t.Setenv("ADDRESS", "127.0.0.1:9100")
 			t.Setenv("GRPC_ADDRESS", "127.0.0.1:3300")
+			t.Setenv("GRPC_CERT_FILE", "/tmp/env-server.pem")
+			t.Setenv("GRPC_KEY_FILE", "/tmp/env-server-key.pem")
 			t.Setenv("STORE_INTERVAL", "20")
 			t.Setenv("FILE_STORAGE_PATH", "/tmp/env-metrics.json")
 			t.Setenv("RESTORE", "false")
@@ -118,6 +132,8 @@ func TestServerConfig(t *testing.T) {
 			cfg, err := config.ParseServerConfig([]string{
 				"-a=127.0.0.1:9000",
 				"-grpc-address=127.0.0.1:3200",
+				"-grpc-cert=/tmp/flag-server.pem",
+				"-grpc-key=/tmp/flag-server-key.pem",
 				"-i=15",
 				"-f=/tmp/custom-metrics.json",
 				"-r=true",
@@ -132,6 +148,8 @@ func TestServerConfig(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "127.0.0.1:9100", cfg.Address)
 			assert.Equal(t, "127.0.0.1:3300", cfg.GRPCAddress)
+			assert.Equal(t, "/tmp/env-server.pem", cfg.GRPCCertFile)
+			assert.Equal(t, "/tmp/env-server-key.pem", cfg.GRPCKeyFile)
 			assert.Equal(t, 20*time.Second, cfg.StoreInterval)
 			assert.Equal(t, "/tmp/env-metrics.json", cfg.FileStoragePath)
 			assert.False(t, cfg.Restore)

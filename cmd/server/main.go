@@ -33,6 +33,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const gracefulShutdownTimeout = 30 * time.Second
@@ -182,7 +183,17 @@ func runServer(args []string, logger zerolog.Logger) (runErr error) {
 	if cfg.GRPCAddress == "" {
 		serveErr = serveUntilShutdown(shutdownCtx, server, server.ListenAndServe, gracefulShutdownTimeout)
 	} else {
-		grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.TrustedSubnetUnaryInterceptor(cfg.TrustedSubnet)))
+		if cfg.GRPCCertFile == "" || cfg.GRPCKeyFile == "" {
+			return fmt.Errorf("grpc TLS certificate and key files are required when GRPC_ADDRESS is set")
+		}
+		transportCredentials, err := credentials.NewServerTLSFromFile(cfg.GRPCCertFile, cfg.GRPCKeyFile)
+		if err != nil {
+			return fmt.Errorf("load grpc TLS credentials: %w", err)
+		}
+		grpcServer := grpc.NewServer(
+			grpc.Creds(transportCredentials),
+			grpc.UnaryInterceptor(grpcserver.TrustedSubnetUnaryInterceptor(cfg.TrustedSubnet)),
+		)
 		metricspb.RegisterMetricsServer(grpcServer, grpcserver.NewMetricsServer(updateMetricCommand))
 		grpcListener, err := net.Listen("tcp", cfg.GRPCAddress)
 		if err != nil {

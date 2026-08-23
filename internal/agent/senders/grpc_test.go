@@ -2,12 +2,22 @@ package senders
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	agentmodel "j30att/observer/internal/agent/model"
 	metricspb "j30att/observer/internal/proto"
 	"j30att/observer/internal/server/grpcserver"
@@ -17,8 +27,14 @@ import (
 )
 
 func TestGRPCSenderSend(t *testing.T) {
+	certFile, keyFile := writeSelfSignedCertificate(t)
 	repo := repository.NewMetricsRepository()
-	server := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.TrustedSubnetUnaryInterceptor("127.0.0.0/8")))
+	transportCredentials, err := credentials.NewServerTLSFromFile(certFile, keyFile)
+	require.NoError(t, err)
+	server := grpc.NewServer(
+		grpc.Creds(transportCredentials),
+		grpc.UnaryInterceptor(grpcserver.TrustedSubnetUnaryInterceptor("127.0.0.0/8")),
+	)
 	metricspb.RegisterMetricsServer(server, grpcserver.NewMetricsServer(update.New(repo)))
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -28,7 +44,10 @@ func TestGRPCSenderSend(t *testing.T) {
 		_ = server.Serve(listener)
 	}()
 
-	sender, err := NewGRPCSender(listener.Addr().String())
+	sender, err := NewGRPCSender(listener.Addr().String(), GRPCSenderOptions{
+		CACertFile: certFile,
+		ServerName: "localhost",
+	})
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, sender.Close())
@@ -57,4 +76,40 @@ func TestGRPCSenderSend(t *testing.T) {
 			t.Fatalf("unexpected metric id: %s", metric.ID)
 		}
 	}
+}
+
+func writeSelfSignedCertificate(t *testing.T) (string, string) {
+	t.Helper()
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "localhost",
+		},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "server.crt")
+	keyFile := filepath.Join(dir, "server.key")
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
+	require.NoError(t, os.WriteFile(certFile, certPEM, 0o600))
+	require.NoError(t, os.WriteFile(keyFile, keyPEM, 0o600))
+
+	return certFile, keyFile
 }
